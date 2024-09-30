@@ -28,7 +28,7 @@ from rteval import version
 
 RTEVAL_VERSION = version.RTEVAL_VERSION
 
-earlystop = False
+EARLYSTOP = False
 
 stopsig = threading.Event()
 def sig_handler(signum, frame):
@@ -106,7 +106,7 @@ class RtEval(rtevalReport):
             if not onlyload or self.__rtevcfg.logging:
                 self.__reportdir = self._make_report_dir(self.__rtevcfg.workdir, "summary.xml")
         except Exception as err:
-            raise RuntimeError(f"Cannot create report directory (NFS with rootsquash on?) [{err}]]")
+            raise RuntimeError(f"Cannot create report directory (NFS with rootsquash on?) [{err}]]") from err
 
         params = {'workdir':self.__rtevcfg.workdir,
                   'reportdir':self.__reportdir and self.__reportdir or "",
@@ -131,7 +131,7 @@ class RtEval(rtevalReport):
 
 
     def __RunMeasurement(self):
-        global earlystop
+        global EARLYSTOP
 
         measure_start = None
         try:
@@ -186,7 +186,7 @@ class RtEval(rtevalReport):
                 stopsig.wait(min(stoptime - currtime, 60.0))
                 if not self._measuremods.isAlive():
                     stoptime = currtime
-                    earlystop = True
+                    EARLYSTOP = True
                     self.__logger.log(Log.WARN,
                                       "Measurement threads did not use the full time slot. Doing a controlled stop.")
 
@@ -214,7 +214,7 @@ class RtEval(rtevalReport):
 
         except RuntimeError as err:
             if not stopsig.is_set():
-                raise RuntimeError(f"appeared during measurement: {err}")
+                raise RuntimeError(f"appeared during measurement: {err}") from err
 
         finally:
             # stop measurement threads
@@ -234,7 +234,7 @@ class RtEval(rtevalReport):
 
     def Measure(self):
         """ Run the full measurement suite with reports """
-        global earlystop
+        global EARLYSTOP
         rtevalres = 0
         measure_start = self.__RunMeasurement()
 
@@ -242,7 +242,7 @@ class RtEval(rtevalReport):
         if self.__rtevcfg.sysreport:
             self._sysinfo.run_sysreport(self.__reportdir)
 
-        if earlystop:
+        if EARLYSTOP:
             rtevalres = 1
         self._sysinfo.copy_dmesg(self.__reportdir)
         self._tar_results()
