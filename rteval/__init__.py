@@ -19,6 +19,7 @@ import threading
 import time
 from datetime import datetime
 import sysconfig
+from traceback import format_exception
 from rteval.modules.loads import LoadModules
 from rteval.modules.measurement import MeasurementModules
 from rteval.rtevalReport import rtevalReport
@@ -29,6 +30,7 @@ from rteval import version
 RTEVAL_VERSION = version.RTEVAL_VERSION
 
 EARLYSTOP = False
+threaderr = False
 
 stopsig = threading.Event()
 def sig_handler(signum, frame):
@@ -39,9 +41,17 @@ def sig_handler(signum, frame):
     else:
         raise RuntimeError(f"SIGNAL received! ({signum})")
 
+def except_hook(args):
+    global threaderr
+
+    threading.__excepthook__(args)
+    threaderr = True
+    stopsig.set()
+
 class RtEval(rtevalReport):
     def __init__(self, config, loadmods, measuremods, logger):
         self.__version = RTEVAL_VERSION
+        threading.excepthook = except_hook
 
         if not isinstance(config, rtevalConfig.rtevalConfig):
             raise TypeError("config variable is not an rtevalConfig object")
@@ -237,6 +247,8 @@ class RtEval(rtevalReport):
         global EARLYSTOP
         rtevalres = 0
         measure_start = self.__RunMeasurement()
+        if threaderr:
+            return 1
 
         self._report(measure_start, self.__rtevcfg.xslt_report)
         if self.__rtevcfg.sysreport:

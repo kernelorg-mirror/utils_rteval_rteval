@@ -252,14 +252,11 @@ class Timerlat(rtevalModulePrototype):
 
         self.__timerlat_out.seek(0)
         self.__timerlat_err.seek(0)
-        try:
-            self.__timerlat_process = subprocess.Popen(self.__cmd,
-                                                       stdout=self.__timerlat_out,
-                                                       stderr=self.__timerlat_err,
-                                                       stdin=None)
-            self.__started = True
-        except OSError:
-            self.__started = False
+        self.__timerlat_process = subprocess.Popen(self.__cmd,
+                                                   stdout=self.__timerlat_out,
+                                                   stderr=self.__timerlat_err,
+                                                   stdin=None)
+        self.__started = True
 
     def WorkloadAlive(self):
         if self.__started:

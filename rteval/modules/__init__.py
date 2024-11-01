@@ -124,8 +124,8 @@ class rtevalModulePrototype(threading.Thread):
 
     def WaitForCompletion(self, wtime=None):
         """ Blocks until the module has completed its workload """
-        if not self.shouldStart():
-            # If it hasn't been started yet, nothing to wait for
+        if self.hadRuntimeError() or not self.shouldStart():
+            # If it failed or hasn't been started yet, nothing to wait for
             return None
         return self.__events["finished"].wait(wtime)
 
@@ -175,7 +175,7 @@ class rtevalModulePrototype(threading.Thread):
         return self._donotrun is False
 
 
-    def run(self):
+    def __run(self):
         "Workload thread runner - takes care of keeping the workload running as long as needed"
         if self.shouldStop():
             return
@@ -215,6 +215,12 @@ class rtevalModulePrototype(threading.Thread):
 
         self._WorkloadCleanup()
 
+    def run(self):
+        try:
+            self.__run()
+        except Exception as e:
+            self._setRuntimeError()
+            raise e
 
     def MakeReport(self):
         """ required module method, needs to return an libxml2.xmlNode object
@@ -532,6 +538,8 @@ class RtEvalModules:
         rep_n = libxml2.newNode(self._report_tag)
 
         for (modname, mod) in self.__modules:
+            if mod.hadRuntimeError():
+                continue
             self._logger.log(Log.DEBUG, f"Getting report from {modname}")
             modrep_n = mod.MakeReport()
             if modrep_n is not None:

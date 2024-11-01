@@ -285,15 +285,11 @@ class Cyclictest(rtevalModulePrototype):
                 fp.flush()
 
         self.__cyclicoutput.seek(0)
-        try:
-            self.__cyclicprocess = subprocess.Popen(self.__cmd,
-                                                    stdout=self.__cyclicoutput,
-                                                    stderr=self.__nullfp,
-                                                    stdin=self.__nullfp)
-            self.__started = True
-        except OSError:
-            self.__started = False
-
+        self.__cyclicprocess = subprocess.Popen(self.__cmd,
+                                                stdout=self.__cyclicoutput,
+                                                stderr=self.__nullfp,
+                                                stdin=self.__nullfp)
+        self.__started = True
 
     def WorkloadAlive(self):
         if self.__started:

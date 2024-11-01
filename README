@@ -16,7 +16,7 @@ The rteval source may be pulled from it's git tree on kernel.org:
 
 Rteval requires the following packages to run:
 
-Python >= 3.0
+Python >= 3.8
     http://www.python.org/download/
 
 python-lxml
