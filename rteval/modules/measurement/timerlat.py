@@ -226,7 +226,8 @@ class Timerlat(rtevalModulePrototype):
         self._setReady()
 
     def _WorkloadPrepare(self):
-        self.__cmd = ['rtla', 'timerlat', 'hist', '-P', f'f:{int(self.__priority)}', '-u']
+        self.__interval = 'interval' in self.__cfg and f'-p{int(self.__cfg.interval)}' or ""
+        self.__cmd = ['rtla', 'timerlat', 'hist', self.__interval, '-P', f'f:{int(self.__priority)}', '-u']
         self.__cmd.append(f'-c{self.__cpulist}')
         self.__cmd.append(f'-E{self.__buckets}')
 
@@ -499,7 +500,10 @@ class Timerlat(rtevalModulePrototype):
 
 def ModuleParameters():
     """ default parameters """
-    return {"priority": {"descr": "Run rtla timerlat with this priority",
+    return {"interval": {"descr": "Base interval or period of threads in microseconds",
+                         "default": 100,
+                         "metavar": "INTV_US"},
+            "priority": {"descr": "Run rtla timerlat with this priority",
                          "default": 95,
                          "metavar": "PRIO" },
             "buckets":  {"descr": "Number of buckets",
