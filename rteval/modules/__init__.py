@@ -298,7 +298,7 @@ reference from the first import"""
                                   action = "store_true",
                                   default = config.GetSection("measurement").setdefault("run-on-isolcpus", "false").lower() == "true",
                                   help = "Include isolated CPUs in default cpulist")
-            grparser.add_argument('--idle-set',
+            grparser.add_argument(f'--{self.__modtype}-idle-set',
                                   dest='measurement___idlestate',
                                   metavar='IDLESTATE',
                                   default=None,
