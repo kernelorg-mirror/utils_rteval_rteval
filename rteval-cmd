@@ -250,7 +250,7 @@ if __name__ == '__main__':
 
         if not config.HasSection('measurement'):
             config.AppendConfig('measurement', {
-                'cyclictest' : 'module',
+                'timerlat' : 'module',
                 'sysstat' : 'module'})
 
         # Prepare log levels before loading modules, not to have unwanted log messages
