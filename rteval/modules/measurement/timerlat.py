@@ -230,6 +230,7 @@ class Timerlat(rtevalModulePrototype):
         self.__cmd = ['rtla', 'timerlat', 'hist', self.__interval, '-P', f'f:{int(self.__priority)}', '-u']
         self.__cmd.append(f'-c{self.__cpulist}')
         self.__cmd.append(f'-E{self.__buckets}')
+        self.__cmd.append('--no-summary')
 
         if self.__cfg.stoptrace:
             self.__cmd.append(f"-T{int(self.__cfg.stoptrace)}")
@@ -392,6 +393,10 @@ class Timerlat(rtevalModulePrototype):
                 self.__stoptrace = True
                 self.__posttrace += line
                 continue
+            elif line.startswith('ALL:'):
+                # We should only see 'ALL:' without timerlat --no-summary
+                # print(line)
+                continue
             else:
                 #print(line)
                 pass
@@ -424,17 +429,20 @@ class Timerlat(rtevalModulePrototype):
         for n in list(self.__timerlatdata.keys()):
             self.__timerlatdata[n].reduce()
 
-        self.__timerlat_out.close()
-
         self._setFinished()
         self.__started = False
+
+        self.__timerlat_err.close()
+        self.__timerlat_out.close()
 
     def MakeReport(self):
         rep_n = libxml2.newNode('timerlat')
         rep_n.newProp('command_line', ' '.join(self.__cmd))
 
+        max_val = self.__timerlatdata['system'].max
+
         stoptrace_invoked_n = libxml2.newNode('stoptrace_invoked')
-        if self.stcpu != -1:
+        if self.stcpu != -1 and max_val > int(self.__cfg.stoptrace):
             stoptrace_invoked_n.newProp("invoked", "true")
         else:
             stoptrace_invoked_n.newProp("invoked", "")

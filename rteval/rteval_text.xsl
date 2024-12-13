@@ -342,7 +342,7 @@
     </xsl:if>
 
     <!-- If stoptrace_invoked is true, no Statistics are available -->
-    <xsl:if test="stoptrace_invoked != true">
+    <xsl:if test="stoptrace_invoked != 'true'">
     <xsl:text>          Statistics: &#10;</xsl:text>
     <xsl:apply-templates select="system/statistics"/>
     </xsl:if>
