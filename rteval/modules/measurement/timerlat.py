@@ -509,7 +509,7 @@ class Timerlat(rtevalModulePrototype):
 def ModuleParameters():
     """ default parameters """
     return {"interval": {"descr": "Base interval or period of threads in microseconds",
-                         "default": 100,
+                         "default": 1100,
                          "metavar": "INTV_US"},
             "priority": {"descr": "Run rtla timerlat with this priority",
                          "default": 95,
