@@ -42,7 +42,7 @@ class SystemServices:
             servicename = os.path.basename(service)
             if not [1 for p in reject if fnmatch.fnmatch(servicename, p)] \
                     and os.access(service, os.X_OK):
-                cmd = f'{getcmdpath("grep")} -qs "\(^\|\W\)status)" {service}'
+                cmd = fr'{getcmdpath("grep")} -qs "\(^\|\W\)status)" {service}'
                 c = subprocess.Popen(cmd, shell=True, encoding='utf-8')
                 c.wait()
                 if c.returncode == 0:
