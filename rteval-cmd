@@ -207,13 +207,6 @@ def parse_options(cfg, parser, cmdargs):
 
     return cmd_args
 
-def remove_offline(cpulist):
-    """ return cpulist in collapsed compressed form with only online cpus """
-    tmplist = expand_cpulist(cpulist)
-    tmplist = SysTopology().online_cpulist(tmplist)
-    return collapse_cpulist(tmplist)
-
-
 if __name__ == '__main__':
     from rteval.sysinfo import dmi
 
