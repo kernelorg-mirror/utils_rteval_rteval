@@ -84,7 +84,7 @@ class TLRunData:
         mid = int(self.__numsamples / 2) + 1
 
         # mean, mode and median
-        occurances = 0
+        occurrences = 0
         lastkey = -1
         for i in keys:
             if mid > total and mid <= total + self.__samples[i]:
@@ -96,8 +96,8 @@ class TLRunData:
             lastkey = i
             total += self.__samples[i]
             total_us += i * self.__samples[i]
-            if self.__samples[i] > occurances:
-                occurances = self.__samples[i]
+            if self.__samples[i] > occurrences:
+                occurrences = self.__samples[i]
                 self.__mode = i
         self.__mean = float(total_us) / float(self.__numsamples)
 
