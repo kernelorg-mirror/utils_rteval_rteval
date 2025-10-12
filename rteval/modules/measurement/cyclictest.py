@@ -270,7 +270,7 @@ class Cyclictest(rtevalModulePrototype):
 
     def _WorkloadTask(self):
         if self.__started:
-            # Don't restart cyclictest if it is already runing
+            # Don't restart cyclictest if it is already running
             return
 
         self._log(Log.DEBUG, f'starting with cmd: {" ".join(self.__cmd)}')
