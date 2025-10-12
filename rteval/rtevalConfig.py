@@ -234,7 +234,7 @@ class rtevalConfig:
             self.__info("no config file")
             return
 
-        if self.ConfigParsed(cfgfile) is True:
+        if self.ConfigParsed(cfgfile):
             # Don't try to reread this file if it's already been parsed
             return
 
