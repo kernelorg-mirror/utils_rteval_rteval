@@ -66,7 +66,7 @@ class TLRunData:
         """ Calculate statistics """
         # Check to see if we have any samples. If there are 1 or 0, return
         if self.__numsamples <= 1:
-            self._log(Log.DEBUG, f"skipping {self.__id} ({self.__numsamples} sampples)")
+            self._log(Log.DEBUG, f"skipping {self.__id} ({self.__numsamples} samples)")
             self.__mad = 0
             self.__stddev = 0
             return
