@@ -68,7 +68,7 @@ def summarize(repfile, xslt):
         xsltdoc = lxml.etree.parse(xsltfp)
         xsltprs = lxml.etree.XSLT(xsltdoc)
 
-    # Load the summay.xml report - with some simple sanity checks
+    # Load the summary.xml report - with some simple sanity checks
     with open(summaryfile, "r") as xmlfp:
         xmldoc = lxml.etree.parse(xmlfp)
 
