@@ -1,3 +1,2 @@
-include COPYING MANIFEST.in rteval-cmd
+include COPYING MANIFEST.in
 recursive-include doc *.? *.txt
-exclude dist/rteval dist/rteval.8.gz
