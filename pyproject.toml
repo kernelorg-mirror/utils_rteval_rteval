@@ -1,0 +1,58 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "rteval"
+dynamic = ["version"]
+description = "Evaluate system performance for Realtime"
+readme = {text = """\
+The rteval script is used to judge the behavior of a hardware
+platform while running a Realtime Linux kernel under a moderate
+to heavy load.
+
+Provides control logic for starting a system load and then running a
+response time measurement utility (cyclictest) for a specified amount
+of time. When the run is finished, the sample data from cyclictest is
+analyzed for standard statistical measurements (i.e mode, median, range,
+mean, variance and standard deviation) and a report is generated.
+""", content-type = "text/plain"}
+requires-python = ">=3.10"
+license = {text = "GPL-2.0-or-later"}
+dependencies = [
+    "lxml",
+    "requests",
+]
+authors = [
+    {name = "Clark Williams", email = "williams@redhat.com"},
+    {name = "David Sommerseth", email = "davids@redhat.com"},
+    {name = "John Kacur", email = "jkacur@redhat.com"},
+]
+maintainers = [
+    {name = "John Kacur", email = "jkacur@redhat.com"},
+]
+
+[project.urls]
+Homepage = "https://git.kernel.org/pub/scm/utils/rteval/rteval.git"
+
+[tool.setuptools]
+packages = [
+    "rteval",
+    "rteval.modules",
+    "rteval.modules.loads",
+    "rteval.modules.measurement",
+    "rteval.sysinfo"
+]
+
+[tool.setuptools.dynamic]
+version = {attr = "rteval.version.RTEVAL_VERSION"}
+
+[tool.setuptools.package-dir]
+rteval = "rteval"
+"rteval.modules" = "rteval/modules"
+"rteval.modules.loads" = "rteval/modules/loads"
+"rteval.modules.measurement" = "rteval/modules/measurement"
+"rteval.sysinfo" = "rteval/sysinfo"
+
+[tool.setuptools.package-data]
+rteval = ["*.xsl", "rteval.conf"]

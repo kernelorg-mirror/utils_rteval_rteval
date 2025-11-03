@@ -44,8 +44,10 @@ mangz.close()
 setup(name="rteval",
       version = RTEVAL_VERSION,
       description = "Evaluate system performance for Realtime",
-      author = "Clark Williams, David Sommerseth",
-      author_email = "williams@redhat.com, davids@redhat.com",
+      author = "Clark Williams, David Sommerseth, John Kacur",
+      author_email = "williams@redhat.com, davids@redhat.com, jkacur@redhat.com",
+      maintainer = "John Kacur",
+      maintainer_email = "jkacur@redhat.com",
       url = "https://git.kernel.org/pub/scm/utils/rteval/rteval.git",
       license = "GPLv2",
       long_description =

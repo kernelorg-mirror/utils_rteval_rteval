@@ -307,7 +307,7 @@ if __name__ == '__main__':
             default_kernel_file = ModuleParameters().get('source').get('default')
             if os.path.exists(tarfl):
                 if rtevcfg.srcdownload == default_kernel_file:
-                    sys.exit("Default kernel already exists, will not download")
+                    sys.exit(f"Default kernel {default_kernel_file} already exists, will not download")
                 prompt = input("Kernel already exists, download and overwrite anyway? (y/n)  ")
                 prompt = prompt.lower()
                 if prompt in ('no', 'n'):
