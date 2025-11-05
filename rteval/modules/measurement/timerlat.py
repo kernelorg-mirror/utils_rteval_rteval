@@ -232,6 +232,12 @@ class Timerlat(rtevalModulePrototype):
         self.__cmd.append(f'-E{self.__buckets}')
         self.__cmd.append('--no-summary')
 
+        # Add dma-latency option if configured (default is 0)
+        # If dma_latency is explicitly set to None, don't pass the option to rtla
+        dma_latency = self.__cfg.setdefault('dma_latency', '0')
+        if dma_latency is not None and str(dma_latency).lower() != 'none':
+            self.__cmd.append(f'--dma-latency={dma_latency}')
+
         if self.__cfg.stoptrace:
             self.__cmd.append(f"-T{int(self.__cfg.stoptrace)}")
 
@@ -523,6 +529,9 @@ def ModuleParameters():
             "trace":    {"descr": "File to save trace to",
                          "default": None,
                          "metavar": "FILE" },
+            "dma_latency": {"descr": "Set /dev/cpu_dma_latency to USEC (set to None to disable)",
+                            "default": "0",
+                            "metavar": "USEC" },
            }
 
 def create(params, logger):
