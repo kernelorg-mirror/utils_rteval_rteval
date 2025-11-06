@@ -30,6 +30,12 @@ sysreport:
 	[ -d $(HERE)/run ] || mkdir run
 	$(PYTHON) rteval-cmd -D -v --workdir=$(HERE)/run --loaddir=$(HERE)/loadsource --duration=$(D) -i $(HERE)/rteval --sysreport
 
+unittest:
+	@echo "Running unit tests..."
+	./run_tests.sh
+
+test: unittest
+
 clean:
 	rm -f *~ rteval/*~ rteval/*.py[co] *.tar.bz2 *.tar.gz doc/*~
 
@@ -66,6 +72,8 @@ help:
 	@echo "rteval Makefile targets:"
 	@echo ""
 	@echo "        runit:     do a short testrun locally [default]"
+	@echo "        test:      run unit tests"
+	@echo "        unittest:  run unit tests (same as test)"
 	@echo "        tarfile:   create the source tarball"
 	@echo "        install:   install rteval locally"
 	@echo "        clean:     cleanup generated files"
@@ -82,3 +90,5 @@ tags:
 .PHONY: cleantags
 cleantags:
 	rm -f tags
+
+.PHONY: test unittest
