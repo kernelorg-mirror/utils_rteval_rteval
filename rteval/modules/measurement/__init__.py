@@ -24,7 +24,7 @@ class MeasurementModules(RtEvalModules):
         for m in modcfg:
             # hope to eventually have different kinds but module is only on
             # for now (jcw)
-            if m[1].lower() == 'module':
+            if m[1] and m[1].lower() == 'module':
                 self._LoadModule(m[0])
 
     def SetupModuleOptions(self, parser):

@@ -303,6 +303,13 @@ reference from the first import"""
                                   metavar='IDLESTATE',
                                   default=None,
                                   help='Idle state depth to set on cpus running measurement modules')
+            grparser.add_argument('--measurement-module',
+                                  dest='measurement___measurement_module',
+                                  type=str,
+                                  choices=['cyclictest', 'timerlat'],
+                                  metavar='MODULE',
+                                  default=None,
+                                  help='Select measurement module: cyclictest or timerlat (overrides config file)')
 
         for (modname, mod) in list(self.__modsloaded.items()):
             opts = mod.ModuleParameters()
