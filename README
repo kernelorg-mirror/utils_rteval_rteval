@@ -28,6 +28,11 @@ libxml2-python
 rt-tests
     git://git.kernel.org/pub/scm/utils/rt-tests/rt-tests.git
 
+Rteval end-to-end tests additionally require the following packages:
+
+Test::Harness
+    https://metacpan.org/pod/Test::Harness
+
 Clark Williams <williams@redhat.com> wrote rteval
 
 David Sommerseth <davids@redhat.com> wrote the XML-RPC and database
