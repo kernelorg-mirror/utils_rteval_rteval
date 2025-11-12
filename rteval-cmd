@@ -220,7 +220,7 @@ if __name__ == '__main__':
 
         if not config.HasSection('measurement'):
             config.AppendConfig('measurement', {
-                'cyclictest' : 'module',
+                'timerlat' : 'module',
                 'sysstat' : 'module'})
 
         # Check for --measurement-module argument early to override config file
@@ -229,17 +229,35 @@ if __name__ == '__main__':
                                         type=str, choices=['cyclictest', 'timerlat'])
         early_args, _ = measurement_parser.parse_known_args()
 
+        # For help generation, we want to load both cyclictest and timerlat modules
+        # so users can see all available options regardless of which one is selected
+        msrcfg = config.GetSection('measurement')
+
+        # Determine which module should actually run before we load both for help
+        selected_measurement_module = None
         if early_args.measurement_module:
-            # Override measurement config based on command-line argument
-            msrcfg = config.GetSection('measurement')
-            # Disable both cyclictest and timerlat first
-            if 'cyclictest' in msrcfg:
-                msrcfg.cyclictest = None
-            if 'timerlat' in msrcfg:
-                msrcfg.timerlat = None
-            # Enable the selected measurement module
-            setattr(msrcfg, early_args.measurement_module, 'module')
-            logger.log(Log.INFO, f"Using measurement module: {early_args.measurement_module} (from command line)")
+            # Command-line argument takes precedence
+            selected_measurement_module = early_args.measurement_module
+            logger.log(Log.INFO, f"Using measurement module: {selected_measurement_module} (from command line)")
+        else:
+            # Check config file to see what's configured
+            cyclictest_in_config = hasattr(msrcfg, 'cyclictest') and msrcfg.cyclictest == 'module'
+            timerlat_in_config = hasattr(msrcfg, 'timerlat') and msrcfg.timerlat == 'module'
+
+            if cyclictest_in_config and not timerlat_in_config:
+                selected_measurement_module = 'cyclictest'
+            elif timerlat_in_config and not cyclictest_in_config:
+                selected_measurement_module = 'timerlat'
+            elif cyclictest_in_config and timerlat_in_config:
+                # Both in config - prefer timerlat as default
+                selected_measurement_module = 'timerlat'
+            else:
+                # Neither in config - default to timerlat
+                selected_measurement_module = 'timerlat'
+
+        # Now ensure both modules are loaded for option display
+        msrcfg.cyclictest = 'module'
+        msrcfg.timerlat = 'module'
 
         # Prepare log levels before loading modules, not to have unwanted log messages
         # Use a minimal parser to extract logging-related flags early
@@ -267,7 +285,7 @@ if __name__ == '__main__':
         if early_args.idle_set:
             rtevcfg.update({'usingCpupower': True})
 
-        # Load modules
+        # Load modules (both cyclictest and timerlat are loaded for help display)
         loadmods = LoadModules(config, logger=logger)
         measuremods = MeasurementModules(config, logger=logger)
 
@@ -276,6 +294,20 @@ if __name__ == '__main__':
         loadmods.SetupModuleOptions(parser)
         measuremods.SetupModuleOptions(parser)
         cmd_opts = parse_options(config, parser, sys.argv[1:])
+
+        # After parsing options, disable the measurement module that won't be used
+        # This must be done after option parsing so both modules' options appear in help
+        msrcfg = config.GetSection('measurement')
+        if hasattr(cmd_opts, 'measurement___measurement_module') and cmd_opts.measurement___measurement_module:
+            selected_measurement_module = cmd_opts.measurement___measurement_module
+
+        # Disable the non-selected measurement module
+        if selected_measurement_module == 'timerlat':
+            if hasattr(msrcfg, 'cyclictest'):
+                msrcfg.cyclictest = None
+        elif selected_measurement_module == 'cyclictest':
+            if hasattr(msrcfg, 'timerlat'):
+                msrcfg.timerlat = None
 
         if rtevcfg.noload:
             if rtevcfg.onlyload:
