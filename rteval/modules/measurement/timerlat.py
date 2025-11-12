@@ -231,6 +231,8 @@ class Timerlat(rtevalModulePrototype):
         self.__cmd.append(f'-c{self.__cpulist}')
         self.__cmd.append(f'-E{self.__buckets}')
         self.__cmd.append('--no-summary')
+        # Disable auto-analysis
+        self.__cmd.append('--no-aa')
 
         # Add dma-latency option if configured (default is 0)
         # If dma_latency is explicitly set to None, don't pass the option to rtla
