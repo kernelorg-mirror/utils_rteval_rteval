@@ -1,0 +1,102 @@
+There currently exist four kinds of tests for rteval:
+
+- Unit tests
+
+Unit tests reside in the tests/ directory. They are Python modules which import
+the Python unittest library.
+
+The Makefile target "unittest" (or, alternatively, just "test") invokes unit
+tests:
+
+$ make test
+Running unit tests...
+./run_tests.sh
+=========================================
+Running rteval Unit Tests
+=========================================
+
+Running: test_measurement_module_selection
+---
+test_argparse_rejects_invalid_module (__main__.TestMeasurementModuleSelection)
+Test that argparse rejects invalid module names ... usage: test_measurement_module_selection.py [--measurement-module {cyclictest,timerlat}]
+test_measurement_module_selection.py: error: argument --measurement-module: invalid choice: 'invalid' (choose from 'cyclictest', 'timerlat')
+ok
+...
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.003s
+
+OK
+✓ PASSED: test_measurement_module_selection
+
+=========================================
+Test Summary
+=========================================
+Total tests run: 1
+Passed: 1
+Failed: 0
+
+✓ All tests passed!
+
+- End-to-end tests
+
+End-to-end tests reside in the tests/e2e subdirectory, in files with
+the .t extension. They are written in bash and produce output compatible with
+the TEP standard.
+
+To run end-to-end tests, the rteval kcompile source tarball has to be present;
+see LOADS variable in Makefile for the tarballs used by the current version of
+rteval.
+
+The Makefile target "check" invokes the end-to-end tests under Test::Harness
+via the "prove" command:
+
+$ sudo make e2e-tests
+PYTHON="python3" RTEVAL="/usr/src/rteval/rteval-cmd" RTEVAL_PKG="/usr/src/rteval" prove -o -f -v tests/e2e/
+...
+All tests successful.
+Files=3, Tests=33, 288 wallclock secs ( 0.02 usr  0.00 sys + 127.59 cusr 155.27 csys = 282.88 CPU)
+Result: PASS
+
+Test::Harness here serves the purpose of measuring time, counting the total
+number of tests, and verifying if each test suite reported the correct number
+of test results.
+
+Note: rteval requires root privileges to run. All tests, with the exception of
+a part of the unit tests, thus require root.
+
+- Pre-defined rteval commands for manual testing
+
+These are accessible under the Makefile targets: "runit", "load", and
+"sysreport".
+
+"runit" tests both measurements and loads, "load" tests only loads, and
+"sysreport" runs both measurements and loads while also generating a SOS report
+at the end of the rteval run.
+
+- Legacy unit tests
+
+Legacy unit tests are embedded directly in rteval source code. The test engine
+to run them is located in tests/unittest-legacy.py, and may be run with
+the following sequence of commands (starting in the root directory):
+
+$ cd rteval/
+$ sudo python3 ../tests/unittest-legacy.py
+...
+ --------------------
+  ** TEST SUMMARY **
+ --------------------
+
+  - Modules:
+      Declared for test:      4
+      Successfully imported:  4
+      Failed import:          0
+
+  - Tests:
+      Tests scheduled:        4
+      Sucessfully tests:      4
+      Failed tests:           0
+      Missing unit_test()     0
+
+Note that some of the tests require root and will fail if run under normal
+user.
