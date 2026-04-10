@@ -283,7 +283,7 @@ def unit_test(rootdir):
         print("------------- XML OUTPUT ----------------------------")
         x.Write("-")
         print("------------- XSLT PARSED OUTPUT --------------------")
-        x.Write("-", "rteval_text.xsl")
+        x.Write("-", "rteval/rteval_text.xsl")
         print("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
         x.Write("/tmp/xmlout-test.xml")
         del x
@@ -294,7 +294,7 @@ def unit_test(rootdir):
         print("------------- LOADED XML DATA --------------------------------")
         x.Write("-")
         print("------------- XSLT PARSED OUTPUT FROM LOADED XML--------------")
-        x.Write("-", "rteval_text.xsl")
+        x.Write("-", "rteval/rteval_text.xsl")
         x.close()
 
         ##  Test new data parser ... it eats most data types
