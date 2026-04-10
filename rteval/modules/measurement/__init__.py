@@ -6,7 +6,7 @@
 import libxml2
 from rteval.modules import RtEvalModules, ModuleContainer
 from rteval.systopology import parse_cpulist_from_config
-import rteval.cpulist_utils as cpulist_utils
+from rteval.cpulist_utils import CpuList, collapse_cpulist
 
 class MeasurementModules(RtEvalModules):
     """Module container for measurement modules"""
@@ -43,7 +43,7 @@ class MeasurementModules(RtEvalModules):
         run_on_isolcpus = modcfg.run_on_isolcpus
         if cpulist is None:
             # Get default cpulist value
-            cpulist = cpulist_utils.collapse_cpulist(parse_cpulist_from_config("", run_on_isolcpus))
+            cpulist = collapse_cpulist(parse_cpulist_from_config("", run_on_isolcpus))
 
         for (modname, modtype) in modcfg:
             if isinstance(modtype, str) and modtype.lower() == 'module':  # Only 'module' will be supported (ds)
@@ -61,6 +61,6 @@ class MeasurementModules(RtEvalModules):
         cpulist = self._cfg.GetSection("measurement").cpulist
         run_on_isolcpus = self._cfg.GetSection("measurement").run_on_isolcpus
         cpulist = parse_cpulist_from_config(cpulist, run_on_isolcpus)
-        rep_n.newProp("measurecpus", cpulist_utils.collapse_cpulist(cpulist))
+        rep_n.newProp("measurecpus", collapse_cpulist(cpulist))
 
         return rep_n

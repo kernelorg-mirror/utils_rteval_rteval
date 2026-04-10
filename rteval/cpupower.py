@@ -9,7 +9,7 @@ import shutil
 import sys
 from rteval.Log import Log
 from rteval.systopology import SysTopology as SysTop
-from rteval import cpulist_utils
+from rteval.cpulist_utils import collapse_cpulist
 
 PATH = '/sys/devices/system/cpu/'
 
@@ -113,7 +113,7 @@ if __name__ == '__main__':
     l = Log()
     l.SetLogVerbosity(Log.DEBUG)
 
-    online_cpus = cpulist_utils.collapse_cpulist(SysTop().online_cpus())
+    online_cpus = collapse_cpulist(SysTop().online_cpus())
     idlestate = '1'
     info = True
 

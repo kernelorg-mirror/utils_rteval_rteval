@@ -9,8 +9,7 @@
 import os
 import os.path
 import glob
-import rteval.cpulist_utils as cpulist_utils
-from rteval.cpulist_utils import sysread
+from rteval.cpulist_utils import CpuList, sysread, is_relative, expand_relative_cpulist, collapse_cpulist
 
 def cpuinfo():
     ''' return a dictionary of cpu keys with various cpu information '''
@@ -65,8 +64,7 @@ class NumaNode:
         """
         self.path = path
         self.nodeid = int(os.path.basename(path)[4:].strip())
-        self.cpus = cpulist_utils.expand_cpulist(sysread(self.path, "cpulist"))
-        self.cpus = cpulist_utils.online_cpulist(self.cpus)
+        self.cpus = CpuList(sysread(self.path, "cpulist")).online().cpus
         self.getmeminfo()
 
     def __contains__(self, cpu):
@@ -98,7 +96,7 @@ class NumaNode:
 
     def getcpustr(self):
         """ return list of cpus for this node as a string """
-        return cpulist_utils.collapse_cpulist(self.cpus)
+        return collapse_cpulist(self.cpus)
 
     def getcpulist(self):
         """ return list of cpus for this node """
@@ -115,8 +113,7 @@ class SimNumaNode(NumaNode):
 
     def __init__(self):
         self.nodeid = 0
-        self.cpus = cpulist_utils.expand_cpulist(sysread(SimNumaNode.cpupath, "possible"))
-        self.cpus = cpulist_utils.online_cpulist(self.cpus)
+        self.cpus = CpuList(sysread(SimNumaNode.cpupath, "possible")).online().cpus
         self.getmeminfo()
 
     def getmeminfo(self):
@@ -198,7 +195,7 @@ class SysTopology:
         """ return a list of integers of all online cpus """
         cpulist = []
         for n in self.nodes:
-            cpulist += cpulist_utils.online_cpulist(self.getcpus(n))
+            cpulist += CpuList(self.getcpus(n)).online().cpus
         cpulist.sort()
         return cpulist
 
@@ -206,7 +203,7 @@ class SysTopology:
         """ return a list of integers of all isolated cpus """
         cpulist = []
         for n in self.nodes:
-            cpulist += cpulist_utils.isolated_cpulist(self.getcpus(n))
+            cpulist += CpuList(self.getcpus(n)).isolated().cpus
         cpulist.sort()
         return cpulist
 
@@ -214,7 +211,7 @@ class SysTopology:
         """ return a list of integers of all default schedulable cpus, i.e. online non-isolated cpus """
         cpulist = []
         for n in self.nodes:
-            cpulist += cpulist_utils.nonisolated_cpulist(self.getcpus(n))
+            cpulist += CpuList(self.getcpus(n)).nonisolated().cpus
         cpulist.sort()
         return cpulist
 
@@ -249,20 +246,19 @@ def parse_cpulist_from_config(cpulist, run_on_isolcpus=False):
     :param run_on_isolcpus: Value of --*-run-on-isolcpus argument
     :return: Sorted list of CPUs as integers
     """
-    if cpulist and not cpulist_utils.is_relative(cpulist):
-        result = cpulist_utils.expand_cpulist(cpulist)
+    if cpulist and not is_relative(cpulist):
         # Only include online cpus
-        result = cpulist_utils.online_cpulist(result)
+        result = CpuList(cpulist).online().cpus
     else:
         result = SysTopology().online_cpus()
         # Get the cpuset from the environment
         cpuset = os.sched_getaffinity(0)
         # Get isolated CPU list
         isolcpus = SysTopology().isolated_cpus()
-        if cpulist and cpulist_utils.is_relative(cpulist):
+        if cpulist and is_relative(cpulist):
             # Include cpus that are not removed in relative cpuset and are either in cpuset from affinity,
             # isolcpus (with run_on_isolcpus enabled, or added by relative cpuset
-            added_cpus, removed_cpus = cpulist_utils.expand_relative_cpulist(cpulist)
+            added_cpus, removed_cpus = expand_relative_cpulist(cpulist)
             result = [c for c in result
                       if (c in cpuset or
                           c in added_cpus or
@@ -295,7 +291,7 @@ if __name__ == "__main__":
 
         onlcpus = s.online_cpus()
         print(f'onlcpus = {onlcpus}')
-        onlcpus = cpulist_utils.collapse_cpulist(onlcpus)
+        onlcpus = collapse_cpulist(onlcpus)
         print(f'onlcpus = {onlcpus}')
 
         onlcpus_str = s.online_cpus_str()

@@ -33,11 +33,7 @@ from rteval import cpupower
 from rteval.version import RTEVAL_VERSION
 from rteval.systopology import SysTopology, parse_cpulist_from_config
 from rteval.modules.loads.kcompile import ModuleParameters
-import rteval.cpulist_utils as cpulist_utils
-
-compress_cpulist = cpulist_utils.compress_cpulist
-expand_cpulist = cpulist_utils.expand_cpulist
-collapse_cpulist = cpulist_utils.collapse_cpulist
+from rteval.cpulist_utils import CpuList, is_relative, collapse_cpulist
 
 def summarize(repfile, xslt):
     """ Summarize an already existing XML report """
@@ -381,7 +377,7 @@ if __name__ == '__main__':
         # Parse cpulists using parse_cpulist_from_config to account for
         # run-on-isolcpus and relative cpusets
         cpulist = parse_cpulist_from_config(msrcfg.cpulist, msrcfg.run_on_isolcpus)
-        if msrcfg_cpulist_present and not cpulist_utils.is_relative(msrcfg.cpulist) and msrcfg.run_on_isolcpus:
+        if msrcfg_cpulist_present and not is_relative(msrcfg.cpulist) and msrcfg.run_on_isolcpus:
             logger.log(Log.WARN, "ignoring --measurement-run-on-isolcpus, since cpulist is specified")
         msrcfg.cpulist = collapse_cpulist(cpulist)
         cpulist = parse_cpulist_from_config(ldcfg.cpulist)
@@ -389,14 +385,14 @@ if __name__ == '__main__':
         # if we only specified one set of cpus (loads or measurement)
         # default the other to the inverse of the specified list
         if not ldcfg_cpulist_present and msrcfg_cpulist_present:
-            tmplist = expand_cpulist(msrcfg.cpulist)
+            tmplist = CpuList(msrcfg.cpulist).cpus
             tmplist = SysTopology().invert_cpulist(tmplist)
-            tmplist = cpulist_utils.online_cpulist(tmplist)
+            tmplist = CpuList(tmplist).online().cpus
             ldcfg.cpulist = collapse_cpulist(tmplist)
         if not msrcfg_cpulist_present and ldcfg_cpulist_present:
-            tmplist = expand_cpulist(ldcfg.cpulist)
+            tmplist = CpuList(ldcfg.cpulist).cpus
             tmplist = SysTopology().invert_cpulist(tmplist)
-            tmplist = cpulist_utils.online_cpulist(tmplist)
+            tmplist = CpuList(tmplist).online().cpus
             msrcfg.cpulist = collapse_cpulist(tmplist)
 
         if ldcfg_cpulist_present:

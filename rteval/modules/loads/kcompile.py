@@ -15,11 +15,7 @@ from rteval.modules import rtevalRuntimeError
 from rteval.modules.loads import CommandLineLoad
 from rteval.Log import Log
 from rteval.systopology import SysTopology
-import rteval.cpulist_utils as cpulist_utils
-
-expand_cpulist = cpulist_utils.expand_cpulist
-compress_cpulist = cpulist_utils.compress_cpulist
-nonisolated_cpulist = cpulist_utils.nonisolated_cpulist
+from rteval.cpulist_utils import CpuList, collapse_cpulist
 
 DEFAULT_KERNEL_PREFIX = "linux-6.17.7"
 
@@ -39,7 +35,7 @@ class KBuildJob:
             os.mkdir(self.objdir)
 
         # Exclude isolated CPUs if cpulist not set
-        cpus_available = len(nonisolated_cpulist(self.node.cpus))
+        cpus_available = len(CpuList(self.node.cpus).nonisolated().cpus)
 
         if os.path.exists('/usr/bin/numactl') and not cpulist:
             # Use numactl
@@ -48,7 +44,7 @@ class KBuildJob:
         elif cpulist:
             # Use taskset
             self.jobs = self.calc_jobs_per_cpu() * len(cpulist)
-            self.binder = f'taskset -c {compress_cpulist(cpulist)}'
+            self.binder = f'taskset -c {collapse_cpulist(cpulist)}'
         else:
             # Without numactl calculate number of jobs from the node
             self.jobs = self.calc_jobs_per_cpu() * cpus_available
@@ -228,7 +224,7 @@ class Kcompile(CommandLineLoad):
 
             # if a cpulist was specified, only allow cpus in that list on the node
             if self.cpulist:
-                self.cpus[n] = [c for c in self.cpus[n] if c in expand_cpulist(self.cpulist)]
+                self.cpus[n] = [c for c in self.cpus[n] if c in CpuList(self.cpulist).cpus]
 
         # remove nodes with no cpus available for running
         for node, cpus in self.cpus.items():
@@ -290,7 +286,7 @@ class Kcompile(CommandLineLoad):
 
         if 'cpulist' in self._cfg and self._cfg.cpulist:
             cpulist = self._cfg.cpulist
-            self.num_cpus = len(expand_cpulist(cpulist))
+            self.num_cpus = len(CpuList(cpulist).cpus)
         else:
             cpulist = ""
 
