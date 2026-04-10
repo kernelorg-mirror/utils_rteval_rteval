@@ -4,8 +4,9 @@
 #   Copyright 2016 - Clark Williams <williams@redhat.com>
 #   Copyright 2021 - John Kacur <jkacur@redhat.com>
 #   Copyright 2023 - Tomas Glozar <tglozar@redhat.com>
+#   Copyright 2026 - John Kacur <jkacur@redhat.com>
 #
-"""Module providing utility functions for working with CPU lists"""
+"""Module providing CpuList class and utility functions for working with CPU lists"""
 
 import os
 
@@ -32,14 +33,170 @@ def _isolated_file_exists():
     return os.path.exists(os.path.join(cpupath, "isolated"))
 
 
+#
+# CpuList class - object-oriented interface for CPU list manipulation
+#
+
+class CpuList:
+    """
+    Object-oriented interface for CPU list manipulation.
+
+    Represents a list of CPU numbers with methods for filtering and transformation.
+    Operations return new CpuList instances, making them chainable.
+
+    Examples:
+        # Create from string
+        cpus = CpuList("0-7,9-11")
+
+        # Create from list
+        cpus = CpuList([0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11])
+
+        # Chain operations
+        online_isolated = CpuList("0-15").online().isolated()
+
+        # Use as iterator
+        for cpu in CpuList("0-3"):
+            print(cpu)
+    """
+
+    def __init__(self, cpulist):
+        """
+        Initialize CpuList from string or list.
+
+        Args:
+            cpulist: Either a string like "0-7,9-11" or a list of integers
+        """
+        if isinstance(cpulist, str):
+            self._cpus = expand_cpulist(cpulist)
+        elif isinstance(cpulist, list):
+            self._cpus = [int(cpu) for cpu in cpulist]
+        else:
+            raise TypeError("cpulist must be a string or list")
+
+        self._cpus.sort()
+
+    @property
+    def cpus(self):
+        """Return the list of CPU numbers"""
+        return self._cpus
+
+    def getcpulist(self):
+        """Return the list of CPU numbers (for backward compatibility)"""
+        return self._cpus
+
+    def online(self):
+        """
+        Return a new CpuList containing only online CPUs.
+
+        Returns:
+            CpuList: New instance with only online CPUs
+        """
+        return CpuList(online_cpulist(self._cpus))
+
+    def isolated(self):
+        """
+        Return a new CpuList containing only isolated CPUs.
+
+        Returns:
+            CpuList: New instance with only isolated CPUs
+        """
+        return CpuList(isolated_cpulist(self._cpus))
+
+    def nonisolated(self):
+        """
+        Return a new CpuList containing only non-isolated CPUs.
+
+        Returns:
+            CpuList: New instance with only non-isolated CPUs
+        """
+        return CpuList(nonisolated_cpulist(self._cpus))
+
+    def __str__(self):
+        """Return collapsed string representation (e.g., '0-7,9-11')"""
+        return collapse_cpulist(self._cpus)
+
+    def __repr__(self):
+        """Return repr string"""
+        return f"CpuList('{self}')"
+
+    def __len__(self):
+        """Return number of CPUs in the list"""
+        return len(self._cpus)
+
+    def __contains__(self, cpu):
+        """Check if CPU is in the list"""
+        return int(cpu) in self._cpus
+
+    def __iter__(self):
+        """Iterate over CPU numbers"""
+        return iter(self._cpus)
+
+    def __eq__(self, other):
+        """Compare two CpuList objects"""
+        if isinstance(other, CpuList):
+            return self._cpus == other._cpus
+        return False
+
+    # Static methods for backward compatibility and direct use
+
+    @staticmethod
+    def expand(cpulist_str):
+        """
+        Expand a range string into a list of CPU numbers.
+
+        Args:
+            cpulist_str: String like "0-7,9-11"
+
+        Returns:
+            list: List of CPU numbers
+        """
+        return expand_cpulist(cpulist_str)
+
+    @staticmethod
+    def collapse(cpulist):
+        """
+        Collapse a list of CPU numbers into a string range.
+
+        Args:
+            cpulist: List of CPU numbers
+
+        Returns:
+            str: Collapsed string like "0-7,9-11"
+        """
+        return collapse_cpulist(cpulist)
+
+    @staticmethod
+    def compress(cpulist):
+        """
+        Return a string representation of cpulist.
+
+        Args:
+            cpulist: List of CPU numbers
+
+        Returns:
+            str: Comma-separated string
+        """
+        return compress_cpulist(cpulist)
+
+
+#
+# Module-level functions - kept for backward compatibility
+#
+
 def collapse_cpulist(cpulist):
     """
     Collapse a list of cpu numbers into a string range
     of cpus (e.g. 0-5, 7, 9)
     """
+    if not cpulist:
+        return ""
+
+    # Ensure we're working with integers and sort them
+    sorted_cpus = sorted([int(cpu) for cpu in cpulist])
+
     cur_range = [None, None]
     result = []
-    for cpu in cpulist + [None]:
+    for cpu in sorted_cpus + [None]:
         if cur_range[0] is None:
             cur_range[0] = cur_range[1] = cpu
             continue
