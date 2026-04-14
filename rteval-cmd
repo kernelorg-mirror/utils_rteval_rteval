@@ -31,7 +31,7 @@ from rteval.modules.loads import LoadModules
 from rteval.modules.measurement import MeasurementModules
 from rteval import cpupower
 from rteval.version import RTEVAL_VERSION
-from rteval.systopology import SysTopology, parse_cpulist_from_config
+from rteval.systopology import SysTopology, parse_cpulist_from_config, validate_housekeeping_cpus
 from rteval.modules.loads.kcompile import ModuleParameters
 from rteval.cpulist_utils import CpuList, is_relative, collapse_cpulist
 
@@ -113,6 +113,9 @@ def parse_options(cfg, parser, cmdargs):
     parser.add_argument("-i", "--installdir", dest="rteval___installdir",
                       type=str, default=rtevcfg.installdir, metavar="DIRECTORY",
                       help=f"place to locate installed templates (default: {rtevcfg.installdir})")
+    parser.add_argument("--housekeeping", dest="rteval___housekeeping",
+                      type=str, default="", metavar="CPULIST",
+                      help="isolated CPUs reserved for system tasks (not used by rteval)")
     parser.add_argument("-s", "--sysreport", dest="rteval___sysreport",
                       action="store_true", default=rtevcfg.sysreport,
                       help=f'run sysreport to collect system data (default: {rtevcfg.sysreport})')
@@ -370,6 +373,13 @@ if __name__ == '__main__':
 
         ldcfg = config.GetSection('loads')
         msrcfg = config.GetSection('measurement')
+
+        # Validate and process housekeeping CPUs
+        housekeeping_cpus = []
+        if rtevcfg.housekeeping:
+            housekeeping_cpus = validate_housekeeping_cpus(rtevcfg.housekeeping)
+            logger.log(Log.DEBUG, f"housekeeping cpulist: {collapse_cpulist(housekeeping_cpus)}")
+
         # Remember if cpulists were explicitly set by the user before running
         # parse_cpulist_from_config, which generates default value for them
         msrcfg_cpulist_present = msrcfg.cpulist != ""
@@ -382,17 +392,51 @@ if __name__ == '__main__':
         msrcfg.cpulist = collapse_cpulist(cpulist)
         cpulist = parse_cpulist_from_config(ldcfg.cpulist)
         ldcfg.cpulist = collapse_cpulist(cpulist)
+
+        # Check for conflicts between housekeeping and measurement/load cpulists
+        if housekeeping_cpus:
+            msrcfg_cpus = CpuList(msrcfg.cpulist).cpus if msrcfg.cpulist else []
+            ldcfg_cpus = CpuList(ldcfg.cpulist).cpus if ldcfg.cpulist else []
+
+            # Check measurement conflicts
+            if msrcfg_cpulist_present:
+                conflicts = [cpu for cpu in housekeeping_cpus if cpu in msrcfg_cpus]
+                if conflicts:
+                    raise RuntimeError(
+                        f"Housekeeping CPUs {collapse_cpulist(conflicts)} conflict with "
+                        f"--measurement-cpulist {msrcfg.cpulist}"
+                    )
+
+            # Check load conflicts
+            if ldcfg_cpulist_present:
+                conflicts = [cpu for cpu in housekeeping_cpus if cpu in ldcfg_cpus]
+                if conflicts:
+                    raise RuntimeError(
+                        f"Housekeeping CPUs {collapse_cpulist(conflicts)} conflict with "
+                        f"--loads-cpulist {ldcfg.cpulist}"
+                    )
+
+            # Filter out housekeeping CPUs from measurement and load lists
+            msrcfg_cpus = [cpu for cpu in msrcfg_cpus if cpu not in housekeeping_cpus]
+            ldcfg_cpus = [cpu for cpu in ldcfg_cpus if cpu not in housekeeping_cpus]
+            msrcfg.cpulist = collapse_cpulist(msrcfg_cpus) if msrcfg_cpus else ""
+            ldcfg.cpulist = collapse_cpulist(ldcfg_cpus) if ldcfg_cpus else ""
+
         # if we only specified one set of cpus (loads or measurement)
         # default the other to the inverse of the specified list
         if not ldcfg_cpulist_present and msrcfg_cpulist_present:
             tmplist = CpuList(msrcfg.cpulist).cpus
             tmplist = SysTopology().invert_cpulist(tmplist)
             tmplist = CpuList(tmplist).online().cpus
+            # Exclude housekeeping CPUs from the inverted list
+            tmplist = [cpu for cpu in tmplist if cpu not in housekeeping_cpus]
             ldcfg.cpulist = collapse_cpulist(tmplist)
         if not msrcfg_cpulist_present and ldcfg_cpulist_present:
             tmplist = CpuList(ldcfg.cpulist).cpus
             tmplist = SysTopology().invert_cpulist(tmplist)
             tmplist = CpuList(tmplist).online().cpus
+            # Exclude housekeeping CPUs from the inverted list
+            tmplist = [cpu for cpu in tmplist if cpu not in housekeeping_cpus]
             msrcfg.cpulist = collapse_cpulist(tmplist)
 
         if ldcfg_cpulist_present:

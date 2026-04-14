@@ -239,6 +239,30 @@ class SysTopology:
         return [c for c in self.online_cpus() if c in cpulist]
 
 
+def validate_housekeeping_cpus(housekeeping_cpulist):
+    """
+    Validates that housekeeping CPUs are in isolated CPU list
+    :param housekeeping_cpulist: CPU list string for housekeeping CPUs
+    :return: Sorted list of validated housekeeping CPUs as integers
+    :raises: RuntimeError if housekeeping CPUs are not in isolcpus
+    """
+    if not housekeeping_cpulist:
+        return []
+
+    housekeeping = CpuList(housekeeping_cpulist).online().cpus
+    isolcpus = SysTopology().isolated_cpus()
+
+    # Check if all housekeeping CPUs are in isolcpus
+    not_isolated = [cpu for cpu in housekeeping if cpu not in isolcpus]
+    if not_isolated:
+        isolcpus_str = collapse_cpulist(isolcpus) if isolcpus else "none"
+        raise RuntimeError(
+            f"Housekeeping CPUs {collapse_cpulist(not_isolated)} are not in isolated CPUs [{isolcpus_str}]"
+        )
+
+    return sorted(housekeeping)
+
+
 def parse_cpulist_from_config(cpulist, run_on_isolcpus=False):
     """
     Generates a cpulist based on --*-cpulist argument given by user
