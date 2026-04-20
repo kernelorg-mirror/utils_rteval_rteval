@@ -294,6 +294,61 @@ def parse_cpulist_from_config(cpulist, run_on_isolcpus=False):
     return result
 
 
+def validate_core_sharing(housekeeping_cpus, measurement_cpus, load_cpus):
+    """
+    Check for CPUs sharing physical cores across different workload types.
+    Warns if isolated CPUs share cores between housekeeping, measurement, and load groups.
+
+    :param housekeeping_cpus: List of housekeeping CPU integers
+    :param measurement_cpus: List of measurement CPU integers
+    :param load_cpus: List of load CPU integers
+    :return: List of warning messages (empty if no issues)
+    """
+    from rteval.sysinfo.coresiblings import CoreSiblings
+
+    warnings = []
+
+    # Get isolated CPUs
+    isolated_cpus = set(SysTopology().isolated_cpus())
+
+    # Create CoreSiblings instance
+    try:
+        cs = CoreSiblings()
+    except Exception:
+        # If we can't read topology, skip validation
+        return warnings
+
+    def check_pair(cpu1, cpu2, type1, type2):
+        """Check if two CPUs share a core and generate warning if at least one is isolated"""
+        if cs.share_core(cpu1, cpu2):
+            cpu1_isol = cpu1 in isolated_cpus
+            cpu2_isol = cpu2 in isolated_cpus
+
+            # Only warn if at least one CPU is isolated
+            if cpu1_isol or cpu2_isol:
+                cpu1_str = f"{type1} CPU {cpu1}{' (isol)' if cpu1_isol else ''}"
+                cpu2_str = f"{type2} CPU {cpu2}{' (isol)' if cpu2_isol else ''}"
+                warnings.append(f"Warning: {cpu1_str} shares core with {cpu2_str}")
+
+    # Check all three combinations
+    # 1. Housekeeping vs Measurement
+    for hk_cpu in housekeeping_cpus:
+        for msr_cpu in measurement_cpus:
+            check_pair(hk_cpu, msr_cpu, "Housekeeping", "measurement")
+
+    # 2. Housekeeping vs Load
+    for hk_cpu in housekeeping_cpus:
+        for ld_cpu in load_cpus:
+            check_pair(hk_cpu, ld_cpu, "Housekeeping", "load")
+
+    # 3. Measurement vs Load
+    for msr_cpu in measurement_cpus:
+        for ld_cpu in load_cpus:
+            check_pair(msr_cpu, ld_cpu, "Measurement", "load")
+
+    return warnings
+
+
 if __name__ == "__main__":
 
     def unit_test():

@@ -8,7 +8,13 @@ import os
 from rteval.cpulist_utils import expand_cpulist
 
 class CoreSiblings:
-    """Query CPU core topology to determine which CPUs share physical cores"""
+    """
+    Query CPU core topology to determine which CPUs share physical cores
+
+    Note: This class works correctly whether SMT/hyperthreading is enabled or disabled.
+    When SMT is disabled, each CPU's thread_siblings_list contains only itself,
+    so the class will correctly report that no CPUs share cores.
+    """
 
     def __init__(self, root="/"):
         self.sysdir = os.path.join(root, 'sys', 'devices', 'system', 'cpu')

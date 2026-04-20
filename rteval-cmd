@@ -31,7 +31,7 @@ from rteval.modules.loads import LoadModules
 from rteval.modules.measurement import MeasurementModules
 from rteval import cpupower
 from rteval.version import RTEVAL_VERSION
-from rteval.systopology import SysTopology, parse_cpulist_from_config, validate_housekeeping_cpus
+from rteval.systopology import SysTopology, parse_cpulist_from_config, validate_housekeeping_cpus, validate_core_sharing
 from rteval.modules.loads.kcompile import ModuleParameters
 from rteval.cpulist_utils import CpuList, is_relative, collapse_cpulist
 
@@ -445,6 +445,12 @@ if __name__ == '__main__':
         if msrcfg_cpulist_present and not rtevcfg.onlyload:
             logger.log(Log.DEBUG, f"measurement cpulist: {msrcfg.cpulist}")
         logger.log(Log.DEBUG, f"workdir: {rtevcfg.workdir}")
+
+        # Validate core sharing between housekeeping, measurement, and load CPUs
+        if housekeeping_cpus or msrcfg_cpus or ldcfg_cpus:
+            core_warnings = validate_core_sharing(housekeeping_cpus, msrcfg_cpus, ldcfg_cpus)
+            for warning in core_warnings:
+                logger.log(Log.WARN, warning)
 
         # if --summarize was specified then just parse the XML, print it and exit
         if cmd_opts.rteval___summarize:
