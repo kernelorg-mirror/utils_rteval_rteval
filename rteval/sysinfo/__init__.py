@@ -35,6 +35,9 @@ class SystemInfo(KernelInfo, SystemServices, dmi.DMIinfo, CPUtopology,
         self.ProcessWarnings()
 
         # Parse CPU info
+        # Note: CPU lists are not available at this point (they're finalized in rteval-cmd),
+        # so we can't add core sharing warnings to the XML report yet.
+        # Console warnings are still generated in rteval-cmd.
         CPUtopology._parse(self)
 
 

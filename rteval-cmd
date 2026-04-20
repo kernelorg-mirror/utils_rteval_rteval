@@ -447,10 +447,11 @@ if __name__ == '__main__':
         logger.log(Log.DEBUG, f"workdir: {rtevcfg.workdir}")
 
         # Validate core sharing between housekeeping, measurement, and load CPUs
-        if housekeeping_cpus or msrcfg_cpus or ldcfg_cpus:
-            core_warnings = validate_core_sharing(housekeeping_cpus, msrcfg_cpus, ldcfg_cpus)
-            for warning in core_warnings:
-                logger.log(Log.WARN, warning)
+        msrcfg_cpus = CpuList(msrcfg.cpulist).cpus if msrcfg.cpulist else []
+        ldcfg_cpus = CpuList(ldcfg.cpulist).cpus if ldcfg.cpulist else []
+        core_warnings = validate_core_sharing(housekeeping_cpus, msrcfg_cpus, ldcfg_cpus)
+        for warning in core_warnings:
+            logger.log(Log.WARN, warning)
 
         # if --summarize was specified then just parse the XML, print it and exit
         if cmd_opts.rteval___summarize:
@@ -487,6 +488,10 @@ if __name__ == '__main__':
             cpupower_controller.enable_idle_state()
 
         rteval = RtEval(config, loadmods, measuremods, logger)
+
+        # Add core sharing warnings to the XML report now that CPU lists are finalized
+        rteval._sysinfo.add_core_sharing_warnings(housekeeping_cpus, msrcfg_cpus, ldcfg_cpus)
+
         rteval.Prepare(rtevcfg.onlyload)
 
         if rtevcfg.onlyload:

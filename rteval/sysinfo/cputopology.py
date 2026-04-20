@@ -94,6 +94,39 @@ class CPUtopology:
         return self.__cputop_n
 
 
+    def add_core_sharing_warnings(self, housekeeping_cpus, measurement_cpus, load_cpus):
+        """
+        Add core sharing warnings to the CPUtopology XML node.
+        Should be called after CPU lists are finalized.
+
+        :param housekeeping_cpus: List of housekeeping CPU integers
+        :param measurement_cpus: List of measurement CPU integers
+        :param load_cpus: List of load CPU integers
+        """
+        if self.__cputop_n is None:
+            return
+
+        # Remove any existing CoreSharingWarnings section
+        existing = self.__cputop_n.xpathEval('CoreSharingWarnings')
+        if existing:
+            for node in existing:
+                node.unlinkNode()
+                node.freeNode()
+
+        # Generate new warnings
+        from rteval.systopology import validate_core_sharing
+        warnings = validate_core_sharing(
+            housekeeping_cpus or [],
+            measurement_cpus or [],
+            load_cpus or []
+        )
+
+        # Add warnings to XML if any were found
+        if warnings:
+            warnings_n = self.__cputop_n.newChild(None, 'CoreSharingWarnings', None)
+            for warning in warnings:
+                warnings_n.newChild(None, 'warning', warning)
+
     def MakeReport(self):
         return self.__cputop_n
 
