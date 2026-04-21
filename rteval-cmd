@@ -494,7 +494,8 @@ if __name__ == '__main__':
         rteval = RtEval(config, loadmods, measuremods, logger)
 
         # Add core sharing warnings to the XML report now that CPU lists are finalized
-        rteval._sysinfo.add_core_sharing_warnings(housekeeping_cpus, msrcfg_cpus, ldcfg_cpus)
+        rteval._sysinfo.add_core_sharing_warnings(housekeeping_cpus, msrcfg_cpus, ldcfg_cpus,
+                                                  cmd_opts.rteval___warn_non_isolated_core_sharing)
 
         rteval.Prepare(rtevcfg.onlyload)
 

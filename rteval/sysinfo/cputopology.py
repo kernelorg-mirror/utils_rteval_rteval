@@ -94,7 +94,7 @@ class CPUtopology:
         return self.__cputop_n
 
 
-    def add_core_sharing_warnings(self, housekeeping_cpus, measurement_cpus, load_cpus):
+    def add_core_sharing_warnings(self, housekeeping_cpus, measurement_cpus, load_cpus, warn_non_isolated=False):
         """
         Add core sharing warnings to the CPUtopology XML node.
         Should be called after CPU lists are finalized.
@@ -102,6 +102,7 @@ class CPUtopology:
         :param housekeeping_cpus: List of housekeeping CPU integers
         :param measurement_cpus: List of measurement CPU integers
         :param load_cpus: List of load CPU integers
+        :param warn_non_isolated: If True, also warn about measurement vs load sharing even when neither is isolated
         """
         if self.__cputop_n is None:
             return
@@ -118,7 +119,8 @@ class CPUtopology:
         warnings = validate_core_sharing(
             housekeeping_cpus or [],
             measurement_cpus or [],
-            load_cpus or []
+            load_cpus or [],
+            warn_non_isolated
         )
 
         # Add warnings to XML if any were found
