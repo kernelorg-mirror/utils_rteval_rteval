@@ -160,7 +160,18 @@
         </xsl:otherwise>
     </xsl:choose>
     <xsl:text>&#10;&#10;</xsl:text>
-   
+
+    <!-- Display core sharing warnings if present -->
+    <xsl:if test="SystemInfo/CPUtopology/CoreSharingWarnings/warning">
+      <xsl:text>   Core Sharing Warnings:&#10;</xsl:text>
+      <xsl:for-each select="SystemInfo/CPUtopology/CoreSharingWarnings/warning">
+        <xsl:text>       </xsl:text>
+        <xsl:value-of select="."/>
+        <xsl:text>&#10;</xsl:text>
+      </xsl:for-each>
+      <xsl:text>&#10;</xsl:text>
+    </xsl:if>
+
     <xsl:text>   System load:&#10;</xsl:text>
     <xsl:text>       Load average: </xsl:text>
     <xsl:value-of select="loads/@load_average"/>
