@@ -116,6 +116,9 @@ def parse_options(cfg, parser, cmdargs):
     parser.add_argument("--housekeeping", dest="rteval___housekeeping",
                       type=str, default="", metavar="CPULIST",
                       help="isolated CPUs reserved for system tasks (not used by rteval)")
+    parser.add_argument("--warn-non-isolated-core-sharing", dest="rteval___warn_non_isolated_core_sharing",
+                      action="store_true", default=False,
+                      help="warn about measurement and load CPUs sharing cores even when neither is isolated")
     parser.add_argument("-s", "--sysreport", dest="rteval___sysreport",
                       action="store_true", default=rtevcfg.sysreport,
                       help=f'run sysreport to collect system data (default: {rtevcfg.sysreport})')
@@ -449,7 +452,8 @@ if __name__ == '__main__':
         # Validate core sharing between housekeeping, measurement, and load CPUs
         msrcfg_cpus = CpuList(msrcfg.cpulist).cpus if msrcfg.cpulist else []
         ldcfg_cpus = CpuList(ldcfg.cpulist).cpus if ldcfg.cpulist else []
-        core_warnings = validate_core_sharing(housekeeping_cpus, msrcfg_cpus, ldcfg_cpus)
+        core_warnings = validate_core_sharing(housekeeping_cpus, msrcfg_cpus, ldcfg_cpus,
+                                              cmd_opts.rteval___warn_non_isolated_core_sharing)
         for warning in core_warnings:
             logger.log(Log.WARN, warning)
 

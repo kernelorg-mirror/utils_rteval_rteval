@@ -294,7 +294,7 @@ def parse_cpulist_from_config(cpulist, run_on_isolcpus=False):
     return result
 
 
-def validate_core_sharing(housekeeping_cpus, measurement_cpus, load_cpus):
+def validate_core_sharing(housekeeping_cpus, measurement_cpus, load_cpus, warn_non_isolated=False):
     """
     Check for CPUs sharing physical cores across different workload types.
     Warns if isolated CPUs share cores between housekeeping, measurement, and load groups.
@@ -302,6 +302,7 @@ def validate_core_sharing(housekeeping_cpus, measurement_cpus, load_cpus):
     :param housekeeping_cpus: List of housekeeping CPU integers
     :param measurement_cpus: List of measurement CPU integers
     :param load_cpus: List of load CPU integers
+    :param warn_non_isolated: If True, also warn about measurement vs load sharing even when neither is isolated
     :return: List of warning messages (empty if no issues)
     """
     from rteval.sysinfo.coresiblings import CoreSiblings
@@ -318,14 +319,22 @@ def validate_core_sharing(housekeeping_cpus, measurement_cpus, load_cpus):
         # If we can't read topology, skip validation
         return warnings
 
-    def check_pair(cpu1, cpu2, type1, type2):
+    def check_pair(cpu1, cpu2, type1, type2, check_type):
         """Check if two CPUs share a core and generate warning if at least one is isolated"""
         if cs.share_core(cpu1, cpu2):
             cpu1_isol = cpu1 in isolated_cpus
             cpu2_isol = cpu2 in isolated_cpus
 
-            # Only warn if at least one CPU is isolated
-            if cpu1_isol or cpu2_isol:
+            # Determine if we should warn based on check_type
+            should_warn = False
+            if check_type == "measurement_vs_load" and warn_non_isolated:
+                # For measurement vs load with flag set: warn if neither is isolated
+                should_warn = not cpu1_isol and not cpu2_isol
+            else:
+                # For all other cases: only warn if at least one CPU is isolated
+                should_warn = cpu1_isol or cpu2_isol
+
+            if should_warn:
                 cpu1_str = f"{type1} CPU {cpu1}{' (isol)' if cpu1_isol else ''}"
                 cpu2_str = f"{type2} CPU {cpu2}{' (isol)' if cpu2_isol else ''}"
                 warnings.append(f"Warning: {cpu1_str} shares core with {cpu2_str}")
@@ -334,17 +343,17 @@ def validate_core_sharing(housekeeping_cpus, measurement_cpus, load_cpus):
     # 1. Housekeeping vs Measurement
     for hk_cpu in housekeeping_cpus:
         for msr_cpu in measurement_cpus:
-            check_pair(hk_cpu, msr_cpu, "Housekeeping", "measurement")
+            check_pair(hk_cpu, msr_cpu, "Housekeeping", "measurement", "housekeeping_vs_measurement")
 
     # 2. Housekeeping vs Load
     for hk_cpu in housekeeping_cpus:
         for ld_cpu in load_cpus:
-            check_pair(hk_cpu, ld_cpu, "Housekeeping", "load")
+            check_pair(hk_cpu, ld_cpu, "Housekeeping", "load", "housekeeping_vs_load")
 
     # 3. Measurement vs Load
     for msr_cpu in measurement_cpus:
         for ld_cpu in load_cpus:
-            check_pair(msr_cpu, ld_cpu, "Measurement", "load")
+            check_pair(msr_cpu, ld_cpu, "Measurement", "load", "measurement_vs_load")
 
     return warnings
 
