@@ -41,6 +41,7 @@ test: unittest
 
 clean:
 	rm -f *~ rteval/*~ rteval/*.py[co] *.tar.bz2 *.tar.gz doc/*~
+	rm -rf rteval-[0-9]*-[0-9]*
 
 realclean: clean
 	rm -rf run
