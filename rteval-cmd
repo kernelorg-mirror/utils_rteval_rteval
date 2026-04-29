@@ -95,69 +95,83 @@ def parse_options(cfg, parser, cmdargs):
     # thus they are prefixed with 'rteval___'.
     # See rteval/rtevalConfig::UpdateFromOptionParser() method for more info
     #
+
+    # Utility/Control Options
+    parser.add_argument("--cleanup-cpusets", dest="rteval___cleanup_cpusets",
+                      action="store_true", default=False,
+                      help="remove any leftover rteval cpusets from previous runs and exit")
+    parser.add_argument("-V", "--version", dest="rteval___version",
+                      action='store_true', default=False,
+                      help='print rteval version and exit')
+
+    # Execution Mode Options
     parser.add_argument("-d", "--duration", dest="rteval___duration",
                       type=str, default=rtevcfg.duration, metavar="DURATION",
                       help=f"specify length of test run (default: {rtevcfg.duration})")
-    parser.add_argument("-v", "--verbose", dest="rteval___verbose",
-                      action="store_true", default=rtevcfg.verbose,
-                      help=f"turn on verbose prints (default: {rtevcfg.verbose})")
-    parser.add_argument("-q", "--quiet", dest="rteval___quiet",
-                      action="store_true", default=rtevcfg.quiet,
-                      help=f"turn on quiet mode (default: {rtevcfg.quiet})")
-    parser.add_argument("-w", "--workdir", dest="rteval___workdir",
-                      type=str, default=rtevcfg.workdir, metavar="DIRECTORY",
-                      help=f"top directory for rteval data (default: {rtevcfg.workdir})")
-    parser.add_argument("-l", "--loaddir", dest="rteval___srcdir",
-                      type=str, default=rtevcfg.srcdir, metavar="DIRECTORY",
-                      help=f"directory for load source tarballs (default: {rtevcfg.srcdir})")
-    parser.add_argument("-i", "--installdir", dest="rteval___installdir",
-                      type=str, default=rtevcfg.installdir, metavar="DIRECTORY",
-                      help=f"place to locate installed templates (default: {rtevcfg.installdir})")
+    parser.add_argument("--noload", dest="rteval___noload",
+                        action="store_true", default=False,
+                        help="only run the measurements (don't run loads)")
+    parser.add_argument("-O", "--onlyload", dest="rteval___onlyload",
+                      action='store_true', default=False,
+                      help="only run the loads (don't run measurement threads)")
+
+    # CPU Configuration Options
+    parser.add_argument("--cpusets", dest="rteval___cpusets",
+                      action="store_true", default=False,
+                      help="use cgroup v2 cpusets to isolate measurement, load, and housekeeping workloads")
     parser.add_argument("--housekeeping", dest="rteval___housekeeping",
                       type=str, default="", metavar="CPULIST",
                       help="isolated CPUs reserved for system tasks (not used by rteval)")
     parser.add_argument("--warn-non-isolated-core-sharing", dest="rteval___warn_non_isolated_core_sharing",
                       action="store_true", default=False,
                       help="warn about measurement and load CPUs sharing cores even when neither is isolated")
-    parser.add_argument("--cpusets", dest="rteval___cpusets",
-                      action="store_true", default=False,
-                      help="use cgroup v2 cpusets to isolate measurement, load, and housekeeping workloads")
-    parser.add_argument("--cleanup-cpusets", dest="rteval___cleanup_cpusets",
-                      action="store_true", default=False,
-                      help="remove any leftover rteval cpusets from previous runs and exit")
-    parser.add_argument("-s", "--sysreport", dest="rteval___sysreport",
-                      action="store_true", default=rtevcfg.sysreport,
-                      help=f'run sysreport to collect system data (default: {rtevcfg.sysreport})')
-    parser.add_argument("-D", '--debug', dest='rteval___debugging',
-                      action='store_true', default=rtevcfg.debugging,
-                      help=f'turn on debug prints (default: {rtevcfg.debugging})')
-    parser.add_argument("-Z", '--summarize', dest='rteval___summarize',
-                      nargs='+', default=None, metavar='XMLFILE',
-                      help='summarize one or more already existing XML reports')
-    parser.add_argument("-H", '--raw-histogram', dest='rteval___rawhistogram',
-                      nargs='+', default=None, metavar='XMLFILE',
-                      help='Generate raw histogram data for one or more already existing XML reports')
+
+    # Configuration & Path Options
     parser.add_argument("-f", "--inifile", dest="rteval___inifile",
                       type=str, default=None, metavar="FILE",
                       help="initialization file for configuring loads and behavior")
-    parser.add_argument("-a", "--annotate", dest="rteval___annotate",
-                      type=str, default=None, metavar="STRING",
-                      help="Add a little annotation which is stored in the report")
+    parser.add_argument("-i", "--installdir", dest="rteval___installdir",
+                      type=str, default=rtevcfg.installdir, metavar="DIRECTORY",
+                      help=f"place to locate installed templates (default: {rtevcfg.installdir})")
+    parser.add_argument("-l", "--loaddir", dest="rteval___srcdir",
+                      type=str, default=rtevcfg.srcdir, metavar="DIRECTORY",
+                      help=f"directory for load source tarballs (default: {rtevcfg.srcdir})")
+    parser.add_argument("-w", "--workdir", dest="rteval___workdir",
+                      type=str, default=rtevcfg.workdir, metavar="DIRECTORY",
+                      help=f"top directory for rteval data (default: {rtevcfg.workdir})")
+
+    # Logging & Verbosity Options
+    parser.add_argument("-D", '--debug', dest='rteval___debugging',
+                      action='store_true', default=rtevcfg.debugging,
+                      help=f'turn on debug prints (default: {rtevcfg.debugging})')
     parser.add_argument("-L", "--logging", dest="rteval___logging",
                       action='store_true', default=False,
                       help='log the output of the loads in the report directory')
-    parser.add_argument("-O", "--onlyload", dest="rteval___onlyload",
-                      action='store_true', default=False,
-                      help="only run the loads (don't run measurement threads)")
-    parser.add_argument("-V", "--version", dest="rteval___version",
-                      action='store_true', default=False,
-                      help='print rteval version and exit')
+    parser.add_argument("-q", "--quiet", dest="rteval___quiet",
+                      action="store_true", default=rtevcfg.quiet,
+                      help=f"turn on quiet mode (default: {rtevcfg.quiet})")
+    parser.add_argument("-v", "--verbose", dest="rteval___verbose",
+                      action="store_true", default=rtevcfg.verbose,
+                      help=f"turn on verbose prints (default: {rtevcfg.verbose})")
+
+    # Reporting Options
+    parser.add_argument("-a", "--annotate", dest="rteval___annotate",
+                      type=str, default=None, metavar="STRING",
+                      help="Add a little annotation which is stored in the report")
+    parser.add_argument("-H", '--raw-histogram', dest='rteval___rawhistogram',
+                      nargs='+', default=None, metavar='XMLFILE',
+                      help='Generate raw histogram data for one or more already existing XML reports')
+    parser.add_argument("-Z", '--summarize', dest='rteval___summarize',
+                      nargs='+', default=None, metavar='XMLFILE',
+                      help='summarize one or more already existing XML reports')
+    parser.add_argument("-s", "--sysreport", dest="rteval___sysreport",
+                      action="store_true", default=rtevcfg.sysreport,
+                      help=f'run sysreport to collect system data (default: {rtevcfg.sysreport})')
+
+    # Advanced/Special Options
     parser.add_argument("-S", "--source-download", nargs="?", dest="rteval___srcdownload",
                         type=str, default=None, const='', metavar="KERNEL_VERSION",
                         help='download a source kernel from kernel.org and exit')
-    parser.add_argument("--noload", dest="rteval___noload",
-                        action="store_true", default=False,
-                        help="only run the measurements (don't run loads)")
 
     cmd_opts = parser.parse_args(args=cmdargs)
 
