@@ -542,10 +542,10 @@ if __name__ == '__main__':
             CpusetManager.cleanup_leftover_cpusets(logger)
 
             # Create manager (will create cpusets in __enter__)
+            # Note: Load CPUs not needed - loads use taskset for CPU affinity
             cpuset_manager = CpusetManager(
                 housekeeping_cpus=housekeeping_cpus,
                 measurement_cpus=msrcfg_cpus,
-                load_cpus=ldcfg_cpus,
                 logger=logger
             )
 
@@ -568,11 +568,7 @@ if __name__ == '__main__':
                     loadmods.Start()
                     nthreads = loadmods.Unleash()
 
-                    # Migrate load processes
-                    time.sleep(0.5)  # Give processes time to spawn
-                    load_pids = loadmods.GetSubprocessPids()
-                    cpuset_manager.migrate_load_threads(load_pids)
-
+                    # Loads use taskset for CPU affinity (no cpuset migration needed)
                     logger.log(Log.INFO, f"Started {nthreads} load threads - will run for {rtevcfg.duration} seconds")
                     logger.log(Log.INFO, "No measurements will be performed, due to the --onlyload option")
                     time.sleep(rtevcfg.duration)

@@ -20,10 +20,11 @@ class CpusetManager:
     """
     Manager for rteval cpusets with automatic cleanup
 
-    Creates 1-3 cpusets dynamically based on CPU configuration:
+    Creates 1-2 cpusets based on configuration:
     - rteval_housekeeping: Only if housekeeping_cpus specified
-    - rteval_workload: When measurement_cpus == load_cpus (combined)
-    - rteval_measurement + rteval_loads: When measurement_cpus != load_cpus (separate)
+    - rteval_measurement: Always created for measurement workloads
+
+    Load workloads use taskset for CPU affinity (no cpuset needed).
 
     Uses context manager pattern for automatic cleanup.
     """
@@ -69,15 +70,16 @@ class CpusetManager:
             except Exception as e:
                 logger.log(Log.WARN, f"Failed to clean up {cpuset_name}: {e}")
 
-    def __init__(self, housekeeping_cpus, measurement_cpus, load_cpus, logger):
+    def __init__(self, housekeeping_cpus, measurement_cpus, logger):
         """
         Initialize cpuset manager
 
         Args:
             housekeeping_cpus: List of CPU integers for housekeeping (may be empty)
             measurement_cpus: List of CPU integers for measurement workloads
-            load_cpus: List of CPU integers for load workloads
             logger: rteval Log instance for logging
+
+        Note: Load workloads use taskset for CPU affinity and don't need cpusets.
         """
         # Check cpuset support
         self.cpusets_init = CpusetsInit()
@@ -87,26 +89,18 @@ class CpusetManager:
         # Store parameters
         self.housekeeping_cpus = housekeeping_cpus
         self.measurement_cpus = measurement_cpus
-        self.load_cpus = load_cpus
         self.logger = logger
 
         # Cpuset objects (will be created in __enter__)
         self.housekeeping_cpuset = None
         self.measurement_cpuset = None
-        self.loads_cpuset = None
-        self.workload_cpuset = None
-
-        # Determine cpuset creation strategy
-        self.use_workload_cpuset = (measurement_cpus == load_cpus)
 
         # Get NUMA node range for memory assignment
         self.numa_nodes = f"0-{self.cpusets_init.numa_nodes - 1}" if self.cpusets_init.numa_nodes > 1 else "0"
 
         self.logger.log(Log.DEBUG, f"CpusetManager initialized: "
                        f"housekeeping={collapse_cpulist(housekeeping_cpus) if housekeeping_cpus else 'none'}, "
-                       f"measurement={collapse_cpulist(measurement_cpus)}, "
-                       f"loads={collapse_cpulist(load_cpus)}, "
-                       f"strategy={'combined workload' if self.use_workload_cpuset else 'separate'}")
+                       f"measurement={collapse_cpulist(measurement_cpus)}")
 
     def __enter__(self):
         """
@@ -125,27 +119,12 @@ class CpusetManager:
             self.housekeeping_cpuset.assign_cpus(collapse_cpulist(self.housekeeping_cpus))
             self.housekeeping_cpuset.write_cpu_exclusive(False)  # partition=member
 
-        # Create workload cpusets based on strategy
-        if self.use_workload_cpuset:
-            # Same CPUs for measurement and loads - create single combined cpuset
-            self.logger.log(Log.DEBUG, f"Creating rteval_workload cpuset with CPUs {collapse_cpulist(self.measurement_cpus)}")
-            self.workload_cpuset = Cpuset('rteval_workload')
-            self.workload_cpuset.write_memnode(self.numa_nodes)
-            self.workload_cpuset.assign_cpus(collapse_cpulist(self.measurement_cpus))
-            self.workload_cpuset.write_cpu_exclusive(False)  # partition=member
-        else:
-            # Different CPUs - create separate measurement and loads cpusets
-            self.logger.log(Log.DEBUG, f"Creating rteval_measurement cpuset with CPUs {collapse_cpulist(self.measurement_cpus)}")
-            self.measurement_cpuset = Cpuset('rteval_measurement')
-            self.measurement_cpuset.write_memnode(self.numa_nodes)
-            self.measurement_cpuset.assign_cpus(collapse_cpulist(self.measurement_cpus))
-            self.measurement_cpuset.write_cpu_exclusive(False)  # partition=member
-
-            self.logger.log(Log.DEBUG, f"Creating rteval_loads cpuset with CPUs {collapse_cpulist(self.load_cpus)}")
-            self.loads_cpuset = Cpuset('rteval_loads')
-            self.loads_cpuset.write_memnode(self.numa_nodes)
-            self.loads_cpuset.assign_cpus(collapse_cpulist(self.load_cpus))
-            self.loads_cpuset.write_cpu_exclusive(False)  # partition=member
+        # Create measurement cpuset
+        self.logger.log(Log.DEBUG, f"Creating rteval_measurement cpuset with CPUs {collapse_cpulist(self.measurement_cpus)}")
+        self.measurement_cpuset = Cpuset('rteval_measurement')
+        self.measurement_cpuset.write_memnode(self.numa_nodes)
+        self.measurement_cpuset.assign_cpus(collapse_cpulist(self.measurement_cpus))
+        self.measurement_cpuset.write_cpu_exclusive(False)  # partition=member
 
         self.logger.log(Log.INFO, "Cpusets created successfully")
         return self
@@ -165,21 +144,10 @@ class CpusetManager:
             # Move all processes back to root cgroup before destroying cpusets
             # Destroy in reverse order of creation
 
-            if self.use_workload_cpuset:
-                if self.workload_cpuset:
-                    self._migrate_to_root(self.workload_cpuset, 'rteval_workload')
-                    self.workload_cpuset.destroy()
-                    self.logger.log(Log.DEBUG, "Destroyed rteval_workload cpuset")
-            else:
-                if self.loads_cpuset:
-                    self._migrate_to_root(self.loads_cpuset, 'rteval_loads')
-                    self.loads_cpuset.destroy()
-                    self.logger.log(Log.DEBUG, "Destroyed rteval_loads cpuset")
-
-                if self.measurement_cpuset:
-                    self._migrate_to_root(self.measurement_cpuset, 'rteval_measurement')
-                    self.measurement_cpuset.destroy()
-                    self.logger.log(Log.DEBUG, "Destroyed rteval_measurement cpuset")
+            if self.measurement_cpuset:
+                self._migrate_to_root(self.measurement_cpuset, 'rteval_measurement')
+                self.measurement_cpuset.destroy()
+                self.logger.log(Log.DEBUG, "Destroyed rteval_measurement cpuset")
 
             if self.housekeeping_cpuset:
                 self._migrate_to_root(self.housekeeping_cpuset, 'rteval_housekeeping')
@@ -229,76 +197,27 @@ class CpusetManager:
 
     def migrate_measurement_threads(self, pids):
         """
-        Migrate measurement process PIDs to appropriate cpuset
-
-        Migrates to rteval_measurement if using separate cpusets,
-        or rteval_workload if using combined cpuset.
+        Migrate measurement subprocess PIDs to rteval_measurement cpuset
 
         Args:
-            pids: List of process IDs to migrate
+            pids: List of subprocess PIDs to migrate
         """
         if not pids:
             self.logger.log(Log.DEBUG, "No measurement PIDs to migrate")
             return
 
-        # Determine target cpuset
-        if self.use_workload_cpuset:
-            target_cpuset = self.workload_cpuset
-            cpuset_name = "rteval_workload"
-        else:
-            target_cpuset = self.measurement_cpuset
-            cpuset_name = "rteval_measurement"
-
-        if not target_cpuset:
-            self.logger.log(Log.WARN, f"Target cpuset {cpuset_name} not created, cannot migrate measurement threads")
+        if not self.measurement_cpuset:
+            self.logger.log(Log.WARN, "rteval_measurement cpuset not created, cannot migrate measurement threads")
             return
 
-        self.logger.log(Log.DEBUG, f"Migrating {len(pids)} measurement PIDs to {cpuset_name}")
+        self.logger.log(Log.DEBUG, f"Migrating {len(pids)} measurement PIDs to rteval_measurement")
 
         migrated = 0
         failed = 0
         for pid in pids:
-            if target_cpuset.write_pid(pid):
+            if self.measurement_cpuset.write_pid(pid):
                 migrated += 1
             else:
                 failed += 1
 
-        self.logger.log(Log.INFO, f"Migrated {migrated} measurement threads to {cpuset_name} (failed: {failed})")
-
-    def migrate_load_threads(self, pids):
-        """
-        Migrate load process PIDs to appropriate cpuset
-
-        Migrates to rteval_loads if using separate cpusets,
-        or rteval_workload if using combined cpuset.
-
-        Args:
-            pids: List of process IDs to migrate
-        """
-        if not pids:
-            self.logger.log(Log.DEBUG, "No load PIDs to migrate")
-            return
-
-        # Determine target cpuset
-        if self.use_workload_cpuset:
-            target_cpuset = self.workload_cpuset
-            cpuset_name = "rteval_workload"
-        else:
-            target_cpuset = self.loads_cpuset
-            cpuset_name = "rteval_loads"
-
-        if not target_cpuset:
-            self.logger.log(Log.WARN, f"Target cpuset {cpuset_name} not created, cannot migrate load threads")
-            return
-
-        self.logger.log(Log.DEBUG, f"Migrating {len(pids)} load PIDs to {cpuset_name}")
-
-        migrated = 0
-        failed = 0
-        for pid in pids:
-            if target_cpuset.write_pid(pid):
-                migrated += 1
-            else:
-                failed += 1
-
-        self.logger.log(Log.INFO, f"Migrated {migrated} load threads to {cpuset_name} (failed: {failed})")
+        self.logger.log(Log.INFO, f"Migrated {migrated} measurement threads to rteval_measurement (failed: {failed})")

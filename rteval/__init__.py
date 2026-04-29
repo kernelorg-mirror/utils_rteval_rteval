@@ -185,19 +185,14 @@ class RtEval(rtevalReport):
             self._measuremods.Unleash()
             measure_start = datetime.now()
 
-            # After Unleash(), do cpuset migration
+            # After Unleash(), migrate measurement threads to cpuset
+            # Note: Load threads use taskset for CPU affinity (no cpuset migration needed)
             if self._cpuset_manager:
-                # Small delay to let processes spawn
+                # Small delay to let measurement processes spawn
                 time.sleep(0.5)
-
-                if self._loadmods:
-                    load_pids = self._loadmods.GetSubprocessPids()
-                    self._cpuset_manager.migrate_load_threads(load_pids)
 
                 meas_pids = self._measuremods.GetSubprocessPids()
                 self._cpuset_manager.migrate_measurement_threads(meas_pids)
-
-                self.__logger.log(Log.INFO, "Processes migrated to cpusets")
 
             # wait for time to expire or thread to die
             signal.signal(signal.SIGINT, sig_handler)
