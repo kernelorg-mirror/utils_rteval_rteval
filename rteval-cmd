@@ -122,6 +122,9 @@ def parse_options(cfg, parser, cmdargs):
     parser.add_argument("--cpusets", dest="rteval___cpusets",
                       action="store_true", default=False,
                       help="use cgroup v2 cpusets to isolate measurement, load, and housekeeping workloads")
+    parser.add_argument("--cleanup-cpusets", dest="rteval___cleanup_cpusets",
+                      action="store_true", default=False,
+                      help="remove any leftover rteval cpusets from previous runs and exit")
     parser.add_argument("-s", "--sysreport", dest="rteval___sysreport",
                       action="store_true", default=rtevcfg.sysreport,
                       help=f'run sysreport to collect system data (default: {rtevcfg.sysreport})')
@@ -165,6 +168,14 @@ def parse_options(cfg, parser, cmdargs):
 
     if cmd_opts.rteval___version:
         print(f"rteval version {RTEVAL_VERSION}")
+        sys.exit(0)
+
+    if cmd_opts.rteval___cleanup_cpusets:
+        from rteval.cpusetmanager import CpusetManager
+        from rteval.Log import Log
+        logger = Log()
+        logger.SetLogVerbosity(Log.INFO)
+        CpusetManager.cleanup_leftover_cpusets(logger)
         sys.exit(0)
 
     if cmd_opts.rteval___duration:

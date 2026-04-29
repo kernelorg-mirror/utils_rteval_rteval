@@ -41,7 +41,7 @@ class CpusetManager:
         """
         cpuset_dirs = glob.glob('/sys/fs/cgroup/rteval_*/')
         if not cpuset_dirs:
-            logger.log(Log.DEBUG, "No leftover rteval cpusets found")
+            logger.log(Log.INFO, "No leftover rteval cpusets found")
             return
 
         logger.log(Log.INFO, f"Cleaning up {len(cpuset_dirs)} leftover rteval cpusets from previous run")
