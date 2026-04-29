@@ -159,6 +159,13 @@ class Hackbench(CommandLineLoad):
         # As hackbench is short-lived, lets pretend it is always alive
         return True
 
+    def get_subprocess_pids(self):
+        """Return PIDs of all running hackbench processes"""
+        pids = []
+        for task in self.tasks.values():
+            if task and task.poll() is None:
+                pids.append(task.pid)
+        return pids
 
     def _WorkloadCleanup(self):
         if self._donotrun:

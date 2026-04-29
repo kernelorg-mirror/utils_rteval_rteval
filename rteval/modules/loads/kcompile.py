@@ -314,6 +314,13 @@ class Kcompile(CommandLineLoad):
 
         return True
 
+    def get_subprocess_pids(self):
+        """Return PIDs of all kcompile build jobs"""
+        pids = []
+        for job in self.buildjobs.values():
+            if job.jobid and job.isrunning():
+                pids.append(job.jobid.pid)
+        return pids
 
     def _WorkloadCleanup(self):
         if self._donotrun:

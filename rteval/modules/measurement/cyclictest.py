@@ -296,6 +296,11 @@ class Cyclictest(rtevalModulePrototype):
             return self.__cyclicprocess.poll() is None
         return False
 
+    def get_subprocess_pids(self):
+        """Return PID of cyclictest process"""
+        if self.__cyclicprocess and self.__cyclicprocess.poll() is None:
+            return [self.__cyclicprocess.pid]
+        return []
 
     def _parse_max_latencies(self, line):
         if not line.startswith('# Max Latencies: '):

@@ -175,6 +175,19 @@ class rtevalModulePrototype(threading.Thread):
         return self._donotrun is False
 
 
+    def get_subprocess_pids(self):
+        """
+        Return list of subprocess PIDs spawned by this module
+
+        This method should be overridden by modules that spawn subprocesses.
+        Default implementation returns an empty list.
+
+        Returns:
+            list: List of integer PIDs of spawned subprocesses
+        """
+        return []
+
+
     def __run(self):
         "Workload thread runner - takes care of keeping the workload running as long as needed"
         if self.shouldStop():
@@ -537,6 +550,23 @@ class RtEvalModules:
             self._logger.log(Log.DEBUG, f"\t - Waiting for {modname}")
             mod.WaitForCompletion(wtime)
         self._logger.log(Log.DEBUG, f"All {self._module_type} modules completed")
+
+
+    def GetSubprocessPids(self):
+        """
+        Get subprocess PIDs from all loaded modules
+
+        Collects PIDs from all modules that will run by calling each module's
+        get_subprocess_pids() method.
+
+        Returns:
+            list: List of integer PIDs from all modules
+        """
+        pids = []
+        for (modname, mod) in self.__modules:
+            if mod.WorkloadWillRun():
+                pids.extend(mod.get_subprocess_pids())
+        return pids
 
 
     def MakeReport(self):

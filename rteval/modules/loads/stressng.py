@@ -110,6 +110,12 @@ class Stressng(CommandLineLoad):
             return self.process.poll() is None
         return False
 
+    def get_subprocess_pids(self):
+        """Return PID of stress-ng process"""
+        if self.started and self.process and self.process.poll() is None:
+            return [self.process.pid]
+        return []
+
     def _WorkloadCleanup(self):
         " Makesure to kill stress-ng before rteval ends "
         if not self.started:

@@ -49,7 +49,7 @@ def except_hook(args):
     stopsig.set()
 
 class RtEval(rtevalReport):
-    def __init__(self, config, loadmods, measuremods, logger):
+    def __init__(self, config, loadmods, measuremods, logger, cpuset_manager=None):
         self.__version = RTEVAL_VERSION
         threading.excepthook = except_hook
 
@@ -66,6 +66,7 @@ class RtEval(rtevalReport):
         self.__logger = logger
         self._loadmods = loadmods
         self._measuremods = measuremods
+        self._cpuset_manager = cpuset_manager
 
         self.__rtevcfg = self.__cfg.GetSection('rteval')
         self.__reportdir = None
@@ -183,6 +184,20 @@ class RtEval(rtevalReport):
                 nthreads = None
             self._measuremods.Unleash()
             measure_start = datetime.now()
+
+            # After Unleash(), do cpuset migration
+            if self._cpuset_manager:
+                # Small delay to let processes spawn
+                time.sleep(0.5)
+
+                if self._loadmods:
+                    load_pids = self._loadmods.GetSubprocessPids()
+                    self._cpuset_manager.migrate_load_threads(load_pids)
+
+                meas_pids = self._measuremods.GetSubprocessPids()
+                self._cpuset_manager.migrate_measurement_threads(meas_pids)
+
+                self.__logger.log(Log.INFO, "Processes migrated to cpusets")
 
             # wait for time to expire or thread to die
             signal.signal(signal.SIGINT, sig_handler)

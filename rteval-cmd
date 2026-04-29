@@ -119,6 +119,9 @@ def parse_options(cfg, parser, cmdargs):
     parser.add_argument("--warn-non-isolated-core-sharing", dest="rteval___warn_non_isolated_core_sharing",
                       action="store_true", default=False,
                       help="warn about measurement and load CPUs sharing cores even when neither is isolated")
+    parser.add_argument("--cpusets", dest="rteval___cpusets",
+                      action="store_true", default=False,
+                      help="use cgroup v2 cpusets to isolate measurement, load, and housekeeping workloads")
     parser.add_argument("-s", "--sysreport", dest="rteval___sysreport",
                       action="store_true", default=rtevcfg.sysreport,
                       help=f'run sysreport to collect system data (default: {rtevcfg.sysreport})')
@@ -380,8 +383,15 @@ if __name__ == '__main__':
         # Validate and process housekeeping CPUs
         housekeeping_cpus = []
         if rtevcfg.housekeeping:
-            housekeeping_cpus = validate_housekeeping_cpus(rtevcfg.housekeeping)
-            logger.log(Log.DEBUG, f"housekeeping cpulist: {collapse_cpulist(housekeeping_cpus)}")
+            if rtevcfg.cpusets:
+                # With cpusets, housekeeping doesn't require isolcpus
+                # Just parse and validate it's a valid CPU list
+                housekeeping_cpus = CpuList(rtevcfg.housekeeping).online().cpus
+                logger.log(Log.DEBUG, f"housekeeping cpulist: {collapse_cpulist(housekeeping_cpus)}")
+            else:
+                # Without cpusets, require housekeeping CPUs to be in isolcpus
+                housekeeping_cpus = validate_housekeeping_cpus(rtevcfg.housekeeping)
+                logger.log(Log.DEBUG, f"housekeeping cpulist: {collapse_cpulist(housekeeping_cpus)}")
 
         # Remember if cpulists were explicitly set by the user before running
         # parse_cpulist_from_config, which generates default value for them
@@ -491,7 +501,31 @@ if __name__ == '__main__':
             cpupower_controller = cpupower.Cpupower(msrcfg.cpulist, msrcfg.idlestate, logger=logger)
             cpupower_controller.enable_idle_state()
 
-        rteval = RtEval(config, loadmods, measuremods, logger)
+        # Cpuset setup if requested
+        cpuset_manager = None
+        if rtevcfg.cpusets:
+            from rteval.cpusetmanager import CpusetManager
+            from rteval.cpuset import CpusetsInit
+
+            # Check if cpusets are supported
+            cpusets_init = CpusetsInit()
+            if not cpusets_init.supported:
+                logger.log(Log.ERR, "Cpusets requested but cgroup v2 cpuset controller not available")
+                sys.exit(1)
+
+            # Clean up any leftover cpusets from previous runs
+            CpusetManager.cleanup_leftover_cpusets(logger)
+
+            # Create manager (will create cpusets in __enter__)
+            cpuset_manager = CpusetManager(
+                housekeeping_cpus=housekeeping_cpus,
+                measurement_cpus=msrcfg_cpus,
+                load_cpus=ldcfg_cpus,
+                logger=logger
+            )
+
+        # Pass cpuset_manager to RtEval (None if not using cpusets)
+        rteval = RtEval(config, loadmods, measuremods, logger, cpuset_manager)
 
         # Add core sharing warnings to the XML report now that CPU lists are finalized
         rteval._sysinfo.add_core_sharing_warnings(housekeeping_cpus, msrcfg_cpus, ldcfg_cpus,
@@ -502,17 +536,44 @@ if __name__ == '__main__':
         if rtevcfg.onlyload:
             # If --onlyload were given, just kick off the loads and nothing more
             # No reports will be created.
-            loadmods.Start()
-            nthreads = loadmods.Unleash()
-            logger.log(Log.INFO, f"Started {nthreads} load threads - will run for {rtevcfg.duration} seconds")
-            logger.log(Log.INFO, "No measurements will be performed, due to the --onlyload option")
-            time.sleep(rtevcfg.duration)
-            loadmods.Stop()
-            ec = 0
+            if rtevcfg.cpusets:
+                with cpuset_manager:
+                    cpuset_manager.migrate_root_tasks_to_housekeeping()
+
+                    loadmods.Start()
+                    nthreads = loadmods.Unleash()
+
+                    # Migrate load processes
+                    time.sleep(0.5)  # Give processes time to spawn
+                    load_pids = loadmods.GetSubprocessPids()
+                    cpuset_manager.migrate_load_threads(load_pids)
+
+                    logger.log(Log.INFO, f"Started {nthreads} load threads - will run for {rtevcfg.duration} seconds")
+                    logger.log(Log.INFO, "No measurements will be performed, due to the --onlyload option")
+                    time.sleep(rtevcfg.duration)
+                    loadmods.Stop()
+                    ec = 0
+            else:
+                loadmods.Start()
+                nthreads = loadmods.Unleash()
+                logger.log(Log.INFO, f"Started {nthreads} load threads - will run for {rtevcfg.duration} seconds")
+                logger.log(Log.INFO, "No measurements will be performed, due to the --onlyload option")
+                time.sleep(rtevcfg.duration)
+                loadmods.Stop()
+                ec = 0
         else:
             # ... otherwise, run the full measurement suite with loads
-            ec = rteval.Measure()
-            logger.log(Log.DEBUG, f"exiting with exit code: {ec}")
+            if rtevcfg.cpusets:
+                with cpuset_manager:
+                    # Migrate existing tasks to housekeeping (if housekeeping cpuset exists)
+                    cpuset_manager.migrate_root_tasks_to_housekeeping()
+
+                    # RtEval will handle migrating measurement/load processes internally
+                    ec = rteval.Measure()
+                    logger.log(Log.DEBUG, f"exiting with exit code: {ec}")
+            else:
+                ec = rteval.Measure()
+                logger.log(Log.DEBUG, f"exiting with exit code: {ec}")
 
         # restore previous idle state settings
         if msrcfg.idlestate:

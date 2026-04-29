@@ -273,6 +273,12 @@ class Timerlat(rtevalModulePrototype):
             return self.__timerlat_process.poll() is None
         return False
 
+    def get_subprocess_pids(self):
+        """Return PID of timerlat process"""
+        if self.__timerlat_process and self.__timerlat_process.poll() is None:
+            return [self.__timerlat_process.pid]
+        return []
+
     def _WorkloadCleanup(self):
         if not self.__started:
             return
