@@ -5,7 +5,8 @@
 Manager for rteval cpusets with automatic cleanup
 
 This module provides the CpusetManager class which orchestrates cpuset creation
-and process migration for rteval workloads (housekeeping, measurement, and loads).
+and process migration for rteval workloads (housekeeping and measurement).
+Loads use taskset for CPU affinity rather than cpusets.
 """
 
 import time

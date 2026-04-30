@@ -118,7 +118,7 @@ def parse_options(cfg, parser, cmdargs):
     # CPU Configuration Options
     parser.add_argument("--cpusets", dest="rteval___cpusets",
                       action="store_true", default=False,
-                      help="use cgroup v2 cpusets to isolate measurement, load, and housekeeping workloads")
+                      help="use cgroup v2 cpusets to isolate measurement and housekeeping workloads")
     parser.add_argument("--housekeeping", dest="rteval___housekeeping",
                       type=str, default="", metavar="CPULIST",
                       help="isolated CPUs reserved for system tasks (not used by rteval)")
