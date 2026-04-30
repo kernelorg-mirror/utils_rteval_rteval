@@ -2,7 +2,7 @@
 #
 #   Copyright 2024  John Kacur <jkacur@redhat.com>
 #
-""" timerlat.py - objectd to manage rtla timerlat """
+""" timerlat.py - object to manage rtla timerlat """
 import os
 import subprocess
 import signal
@@ -282,172 +282,200 @@ class Timerlat(rtevalModulePrototype):
     def _WorkloadCleanup(self):
         if not self.__started:
             return
-        while self.__timerlat_process.poll() is None:
-            self._log(Log.DEBUG, "Sending SIGINT")
+
+        # Send SIGINT and wait for graceful exit
+        # Limit attempts to avoid infinite loop and double-SIGINT issues (RHEL-140898)
+        max_attempts = 5
+        attempt = 0
+        while self.__timerlat_process.poll() is None and attempt < max_attempts:
+            self._log(Log.DEBUG, f"Sending SIGINT (attempt {attempt + 1}/{max_attempts})")
             os.kill(self.__timerlat_process.pid, signal.SIGINT)
             time.sleep(2)
+            attempt += 1
+
+        # Check if process exited
+        exit_code = self.__timerlat_process.returncode
+        if exit_code is None:
+            # Process still running after max attempts, force kill
+            self._log(Log.WARN, "timerlat did not respond to SIGINT, sending SIGKILL")
+            os.kill(self.__timerlat_process.pid, signal.SIGKILL)
+            self.__timerlat_process.wait()
+            exit_code = self.__timerlat_process.returncode
+        elif exit_code != 0:
+            self._log(Log.WARN, f"timerlat exited with non-zero status: {exit_code}")
 
 
-        # Parse histogram output
-        self.__timerlat_out.seek(0)
+        # Parse histogram output - use try/finally to ensure _setFinished() is always called
+        # This prevents hangs if parsing fails due to partial output (RHEL-140898)
+        try:
+            self.__timerlat_out.seek(0)
 
-        blocking_thread_detected = False
-        softirq_interference_detected = False
-        irq_interference_detected = False
+            blocking_thread_detected = False
+            softirq_interference_detected = False
+            irq_interference_detected = False
 
-        for line in self.__timerlat_out:
-            line = bytes.decode(line)
+            for line in self.__timerlat_out:
+                line = bytes.decode(line)
 
-            # Skip any blank lines
-            if not line:
-                continue
-
-            # Parsing if stoptrace has been invoked
-            if self.__stoptrace:
-                self.__posttrace += line
-                line = line.strip()
-                fields = line.split()
+                # Skip any blank lines
                 if not line:
                     continue
-                if line.startswith("##") and fields[1] == "CPU":
-                    self.stcpu = int(fields[2])
-                    self._log(Log.DEBUG, f"self.stcpu = {self.stcpu}")
-                    self.__stdata[self.stcpu] = {}
-                    continue
-                if self.stcpu == -1:
-                    self._log(Log.WARN, "Stop trace has been invoked, but a stop cpu has not been identified.")
-                    continue
-                if line.startswith('------------------'):
-                    blocking_thread_detected = False
-                    softirq_interference_detected = False
-                    irq_interference_detected = False
+
+                # Parsing if stoptrace has been invoked
+                if self.__stoptrace:
+                    self.__posttrace += line
+                    line = line.strip()
+                    fields = line.split()
+                    if not line:
+                        continue
+                    if line.startswith("##") and fields[1] == "CPU":
+                        self.stcpu = int(fields[2])
+                        self._log(Log.DEBUG, f"self.stcpu = {self.stcpu}")
+                        self.__stdata[self.stcpu] = {}
+                        continue
+                    if self.stcpu == -1:
+                        self._log(Log.WARN, "Stop trace has been invoked, but a stop cpu has not been identified.")
+                        continue
+                    if line.startswith('------------------'):
+                        blocking_thread_detected = False
+                        softirq_interference_detected = False
+                        irq_interference_detected = False
+                        continue
+
+                    # work around rtla not printing ':' after all names
+                    if line.startswith('Softirq interference'):
+                        name = 'Softirq_interference'
+                    elif line.startswith('IRQ interference'):
+                        name = 'IRQ_interference'
+                    else:
+                        name = ''.join(line.split(':')[0]).replace(' ', '_')
+                    self._log(Log.DEBUG, f"name={name}")
+
+                    if name in ['Thread_latency']:
+                        latency = fields[-3]
+                        percent = fields[-1].strip('()%')
+                        self._log(Log.DEBUG, f'{name} = ({latency}, {percent})')
+                        self.__stdata[self.stcpu][name] = (latency, percent)
+                        continue
+                    if name in ['Timerlat_IRQ_duration', 'IRQ_handler_delay', 'Blocking_thread', 'IRQ_interference', 'Softirq_interference']:
+                        latency = fields[-4]
+                        percent = fields[-2].strip('(')
+                        if name == 'IRQ_handler_delay' and fields[3] == '(exit':
+                            name = 'IRQ_handler_delay_exit_from_idle'
+                        self._log(Log.DEBUG, f'{name} = ({latency}, {percent})')
+                        self.__stdata[self.stcpu][name] = (latency, percent)
+                        detected = {'Blocking_thread' : (True, False, False),
+                                    'IRQ_interference' : (False, True, False),
+                                    'Softirq_interference' : (False, False, True) }
+                        if name in ('Blocking_thread', 'IRQ_interference', 'Softirq_interference'):
+                            blocking_thread_detected, irq_interference_detected, softirq_interference_detected = detected.get(name)
+                        continue
+                    if name in ["IRQ_latency", "Previous_IRQ_interference"]:
+                        latency = fields[-2]
+                        self._log(Log.DEBUG, f'{name} = {fields[-2]}')
+                        self.__stdata[self.stcpu][name] = fields[-2]
+                        continue
+                    if blocking_thread_detected or softirq_interference_detected or irq_interference_detected:
+                        if blocking_thread_detected:
+                            field_name = "blocking_thread"
+                        elif softirq_interference_detected:
+                            field_name = "softirq_interference"
+                        elif irq_interference_detected:
+                            field_name = "irq_interference"
+                        thread = " ".join(fields[0:-2])
+                        latency = fields[-2]
+                        self._log(Log.DEBUG, f"{field_name} += [({thread}, {latency})]")
+                        self.__stdata[self.stcpu].setdefault(field_name, [])
+                        self.__stdata[self.stcpu][field_name] += [(thread, latency)]
+                        continue
+                    if name == "Max_timerlat_IRQ_latency_from_idle":
+                        latency = fields[-5]
+                        max_timerlat_cpu = int(fields[-1])
+                        self._log(Log.DEBUG, f'self.__stdata[{max_timerlat_cpu}][{name}] = {latency}')
+                        self.__stdata.setdefault(max_timerlat_cpu, {})
+                        self.__stdata[max_timerlat_cpu][name] = latency
+                    else:
+                        self._log(Log.DEBUG, f'line = {line}')
                     continue
 
-                # work around rtla not printing ':' after all names
-                if line.startswith('Softirq interference'):
-                    name = 'Softirq_interference'
-                elif line.startswith('IRQ interference'):
-                    name = 'IRQ_interference'
+                if line.startswith('#'):
+                    if line.startswith('# Duration:'):
+                        duration = line.split()[2]
+                        duration += line.split()[3]
+                        self.__timerlatdata['system'].duration = duration
+                    continue
+                elif line.startswith('Index'):
+                    #print(line)
+                    continue
+                elif line.startswith('over:'):
+                    #print(line)
+                    continue
+                elif line.startswith('count:'):
+                    #print(line)
+                    continue
+                elif line.startswith('min:'):
+                    #print(line)
+                    continue
+                elif line.startswith('avg:'):
+                    #print(line)
+                    continue
+                elif line.startswith('max:'):
+                    #print(line)
+                    continue
+                elif line.startswith('rtla timerlat hit stop tracing'):
+                    self.__stoptrace = True
+                    self.__posttrace += line
+                    continue
+                elif line.startswith('ALL:'):
+                    # We should only see 'ALL:' without timerlat --no-summary
+                    # print(line)
+                    continue
                 else:
-                    name = ''.join(line.split(':')[0]).replace(' ', '_')
-                self._log(Log.DEBUG, f"name={name}")
+                    #print(line)
+                    pass
 
-                if name in ['Thread_latency']:
-                    latency = fields[-3]
-                    percent = fields[-1].strip('()%')
-                    self._log(Log.DEBUG, f'{name} = ({latency}, {percent})')
-                    self.__stdata[self.stcpu][name] = (latency, percent)
+                vals = line.split()
+                if not vals:
+                    # If we don't have any values, don't try parsing
                     continue
-                if name in ['Timerlat_IRQ_duration', 'IRQ_handler_delay', 'Blocking_thread', 'IRQ_interference', 'Softirq_interference']:
-                    latency = fields[-4]
-                    percent = fields[-2].strip('(')
-                    if name == 'IRQ_handler_delay' and fields[3] == '(exit':
-                        name = 'IRQ_handler_delay_exit_from_idle'
-                    self._log(Log.DEBUG, f'{name} = ({latency}, {percent})')
-                    self.__stdata[self.stcpu][name] = (latency, percent)
-                    detected = {'Blocking_thread' : (True, False, False),
-                                'IRQ_interference' : (False, True, False),
-                                'Softirq_interference' : (False, False, True) }
-                    if name in ('Blocking_thread', 'IRQ_interference', 'Softirq_interference'):
-                        blocking_thread_detected, irq_interference_detected, softirq_interference_detected = detected.get(name)
+                try:
+                    # The index corresponds to the bucket number
+                    index = int(vals[0])
+                except ValueError:
+                    self._log(Log.DEBUG, f'timerlat: unexpected output: {line}')
                     continue
-                if name in ["IRQ_latency", "Previous_IRQ_interference"]:
-                    latency = fields[-2]
-                    self._log(Log.DEBUG, f'{name} = {fields[-2]}')
-                    self.__stdata[self.stcpu][name] = fields[-2]
-                    continue
-                if blocking_thread_detected or softirq_interference_detected or irq_interference_detected:
-                    if blocking_thread_detected:
-                        field_name = "blocking_thread"
-                    elif softirq_interference_detected:
-                        field_name = "softirq_interference"
-                    elif irq_interference_detected:
-                        field_name = "irq_interference"
-                    thread = " ".join(fields[0:-2])
-                    latency = fields[-2]
-                    self._log(Log.DEBUG, f"{field_name} += [({thread}, {latency})]")
-                    self.__stdata[self.stcpu].setdefault(field_name, [])
-                    self.__stdata[self.stcpu][field_name] += [(thread, latency)]
-                    continue
-                if name == "Max_timerlat_IRQ_latency_from_idle":
-                    latency = fields[-5]
-                    max_timerlat_cpu = int(fields[-1])
-                    self._log(Log.DEBUG, f'self.__stdata[{max_timerlat_cpu}][{name}] = {latency}')
-                    self.__stdata.setdefault(max_timerlat_cpu, {})
-                    self.__stdata[max_timerlat_cpu][name] = latency
-                else:
-                    self._log(Log.DEBUG, f'line = {line}')
-                continue
 
-            if line.startswith('#'):
-                if line.startswith('# Duration:'):
-                    duration = line.split()[2]
-                    duration += line.split()[3]
-                    self.__timerlatdata['system'].duration = duration
-                continue
-            elif line.startswith('Index'):
-                #print(line)
-                continue
-            elif line.startswith('over:'):
-                #print(line)
-                continue
-            elif line.startswith('count:'):
-                #print(line)
-                continue
-            elif line.startswith('min:'):
-                #print(line)
-                continue
-            elif line.startswith('avg:'):
-                #print(line)
-                continue
-            elif line.startswith('max:'):
-                #print(line)
-                continue
-            elif line.startswith('rtla timerlat hit stop tracing'):
-                self.__stoptrace = True
-                self.__posttrace += line
-                continue
-            elif line.startswith('ALL:'):
-                # We should only see 'ALL:' without timerlat --no-summary
-                # print(line)
-                continue
-            else:
-                #print(line)
-                pass
+                for i, core in enumerate(self.__cpus):
+                    # There might not be a count on every cpu if tracing invoked
+                    try:
+                        if i*3 + 1 >= len(vals):
+                            self.__timerlatdata[core].bucket(index, 0, 0, 0)
+                            self.__timerlatdata['system'].bucket(index, 0, 0, 0)
+                        else:
+                            self.__timerlatdata[core].bucket(index, int(vals[i*3+1]),
+                                                         int(vals[i*3+2]),
+                                                         int(vals[i*3+3]))
+                            self.__timerlatdata['system'].bucket(index, int(vals[i*3+1]),
+                                                         int(vals[i*3+2]),
+                                                         int(vals[i*3+3]))
+                    except (IndexError, ValueError) as e:
+                        # Handle partial output from rtla (can happen on SIGINT during cleanup)
+                        self._log(Log.WARN, f"Error parsing timerlat bucket data for core {core}: {e}")
+                        continue
 
-            vals = line.split()
-            if not vals:
-                # If we don't have any values, don't try parsing
-                continue
-            try:
-                # The index corresponds to the bucket number
-                index = int(vals[0])
-            except:
-                self._log(Log.DEBUG, f'timerlat: unexpected output: {line}')
-                continue
+                # Generate statistics for each RunData object
+                for n in list(self.__timerlatdata.keys()):
+                    self.__timerlatdata[n].reduce()
 
-            for i, core in enumerate(self.__cpus):
-                # There might not be a count on every cpu if tracing invoked
-                if i*3 + 1 >= len(vals):
-                    self.__timerlatdata[core].bucket(index, 0, 0, 0)
-                    self.__timerlatdata['system'].bucket(index, 0, 0, 0)
-                else:
-                    self.__timerlatdata[core].bucket(index, int(vals[i*3+1]),
-                                                 int(vals[i*3+2]),
-                                                 int(vals[i*3+3]))
-                    self.__timerlatdata['system'].bucket(index, int(vals[i*3+1]),
-                                                 int(vals[i*3+2]),
-                                                 int(vals[i*3+3]))
+        except Exception as e:
+            self._log(Log.ERR, f"Error parsing timerlat output: {e}")
+        finally:
+            # Always signal completion to avoid hangs
+            self._setFinished()
+            self.__started = False
 
-        # Generate statistics for each RunData object
-        for n in list(self.__timerlatdata.keys()):
-            self.__timerlatdata[n].reduce()
-
-        self._setFinished()
-        self.__started = False
-
-        self.__timerlat_err.close()
-        self.__timerlat_out.close()
+            self.__timerlat_err.close()
+            self.__timerlat_out.close()
 
     def MakeReport(self):
         rep_n = libxml2.newNode('timerlat')
