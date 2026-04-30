@@ -477,6 +477,15 @@ if __name__ == '__main__':
             tmplist = [cpu for cpu in tmplist if cpu not in housekeeping_cpus]
             msrcfg.cpulist = collapse_cpulist(tmplist)
 
+        # Warn if all CPUs are isolated and loads have no CPUs
+        if not ldcfg.cpulist:
+            isolated_cpus = SysTopology().isolated_cpus()
+            online_cpus = SysTopology().online_cpus()
+            if isolated_cpus and set(isolated_cpus) == set(online_cpus):
+                logger.log(Log.WARN,
+                    "All CPUs are isolated and loads have no CPUs assigned. "
+                    "Specify --loads-cpulist explicitly to choose where loads should run.")
+
         if ldcfg_cpulist_present:
             logger.log(Log.DEBUG, f"loads cpulist: {ldcfg.cpulist}")
         # if --onlyload is specified msrcfg.cpulist is unused
