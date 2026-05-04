@@ -92,10 +92,10 @@ check "timerlat command, with --timerlat-buckets" \
 
 check "timerlat command, with --timerlat-stoptrace" \
   "--noload -d 1 --timerlat-stoptrace 1" any \
-  'Command: rtla timerlat hist -p100 -P f:95 -u -c[0-9|-]+ -E3500 --no-summary -T1'
+  'Command: rtla timerlat hist -p100 -P f:95 -u -c[0-9|-]+ -E3500 --no-summary --no-aa --dma-latency=0 -T1'
 
 check "timerlat command, with --timerlat-trace" \
   "--noload -d 1 --timerlat-stoptrace 1 --timerlat-trace trace.txt" any \
-  'Command: rtla timerlat hist -p100 -P f:95 -u -c[0-9|-]+ -E3500 --no-summary -T1 -t=trace.txt'
+  'Command: rtla timerlat hist -p100 -P f:95 -u -c[0-9|-]+ -E3500 --no-summary --no-aa --dma-latency=0 -T1 -t=trace.txt'
 
 test_end

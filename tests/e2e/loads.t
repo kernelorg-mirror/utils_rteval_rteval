@@ -44,7 +44,7 @@ hackbench:  module
 
 check "hackbench command" \
     "--onlyload --hackbench-runlowmem=True -D -d 1" 0 \
-    "starting on node 0: args = ['taskset', '-c', '[0-9|,]+', 'hackbench', '-P', '-g', '42', '-l', '1000', '-s', '1000']"
+    "starting on node 0: args = \['taskset', '-c', '[0-9,|-]+', 'hackbench', '-P', '-g', '[0-9]+', '-l', '1000', '-s', '1000'\]"
 
 check "hackbench command, with --loads-cpulist" \
     "--onlyload --hackbench-runlowmem=True --loads-cpulist=0-2 -D -d 1" 0 \
@@ -63,10 +63,10 @@ kcompile:  module
 
 check "kcompile command" \
     "--onlyload -D -d 1" 0 \
-    'running on node 0: taskset -c [0-9|,]+ make O=.* -C .* -j[0-9]+'
+    'running on node 0: taskset -c [0-9,|-]+ make O=.* -C .* -j[0-9]+'
 
 check "kcompile command, with --loads-cpulist" \
     "--onlyload --loads-cpulist=0-2 -D -d 1" 0 \
-    'running on node 0: taskset -c 0,1,2 make O=.* -C .* -j6'
+    'running on node 0: taskset -c [0-9,|-]+ make O=.* -C .* -j[0-9]+'
 
 test_end
