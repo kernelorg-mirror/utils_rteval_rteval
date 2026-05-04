@@ -21,6 +21,18 @@ LOADS	:=	$(KLOAD) $(BLOAD)
 e2e-tests: rteval-cmd
 	PYTHON="$(PYTHON)" RTEVAL="$(HERE)/rteval-cmd" RTEVAL_PKG="$(HERE)" prove -o -f -v tests/e2e/
 
+regression-tests:
+	@echo "Running regression tests for measurement module error handling (RHEL-140898)"
+	@echo "These tests require root privileges to replace system binaries temporarily"
+	@echo ""
+	@if [ "$$(id -u)" != "0" ]; then \
+		echo "ERROR: regression-tests must be run as root"; \
+		echo "Usage: sudo make regression-tests"; \
+		exit 1; \
+	fi
+	./tests/regression/test-timerlat-error-handling.sh
+	./tests/regression/test-cyclictest-error-handling.sh
+
 runit:
 	[ -d $(HERE)/run ] || mkdir run
 	$(PYTHON) rteval-cmd -D -L -v --workdir=$(HERE)/run --loaddir=$(HERE)/loadsource --duration=$(D) -f $(HERE)/rteval.conf -i $(HERE)/rteval $(EXTRA)
@@ -75,16 +87,18 @@ help:
 	@echo ""
 	@echo "rteval Makefile targets:"
 	@echo ""
-	@echo "        runit:     do a short testrun locally [default]"
-	@echo "        test:      run unit tests"
-	@echo "        unittest:  run unit tests (same as test)"
-	@echo "        tarfile:   create the source tarball"
-	@echo "        install:   install rteval locally"
-	@echo "        clean:     cleanup generated files"
-	@echo "        realclean: Same as clean plus directory run"
-	@echo "        sysreport: do a short testrun and generate sysreport data"
-	@echo "        tags:      generate a ctags file"
-	@echo "        cleantags: remove the ctags file"
+	@echo "        runit:            do a short testrun locally [default]"
+	@echo "        test:             run unit tests"
+	@echo "        unittest:         run unit tests (same as test)"
+	@echo "        e2e-tests:        run end-to-end tests"
+	@echo "        regression-tests: run regression tests for measurement modules (requires root)"
+	@echo "        tarfile:          create the source tarball"
+	@echo "        install:          install rteval locally"
+	@echo "        clean:            cleanup generated files"
+	@echo "        realclean:        Same as clean plus directory run"
+	@echo "        sysreport:        do a short testrun and generate sysreport data"
+	@echo "        tags:             generate a ctags file"
+	@echo "        cleantags:        remove the ctags file"
 	@echo ""
 
 .PHONY: tags
@@ -95,4 +109,4 @@ tags:
 cleantags:
 	rm -f tags
 
-.PHONY: test unittest
+.PHONY: test unittest e2e-tests regression-tests
