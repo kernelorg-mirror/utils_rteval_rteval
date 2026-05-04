@@ -306,63 +306,97 @@ class Cyclictest(rtevalModulePrototype):
         if not line.startswith('# Max Latencies: '):
             return
 
-        line = line.split(':')[1]
-        vals = [int(x) for x in line.split()]
+        try:
+            line = line.split(':')[1]
+            vals = [int(x) for x in line.split()]
 
-        for i, core in enumerate(self.__cpus):
-            self.__cyclicdata[core].update_max(vals[i])
-            self.__cyclicdata['system'].update_max(vals[i])
+            for i, core in enumerate(self.__cpus):
+                self.__cyclicdata[core].update_max(vals[i])
+                self.__cyclicdata['system'].update_max(vals[i])
+        except (IndexError, ValueError) as e:
+            self._log(Log.WARN, f"Error parsing max latencies: {e}")
 
 
     def _WorkloadCleanup(self):
         if not self.__started:
             return
-        while self.__cyclicprocess.poll() is None:
-            self._log(Log.DEBUG, "Sending SIGINT")
+
+        # Send SIGINT and wait for graceful exit
+        # Limit attempts to avoid infinite loop (RHEL-140898)
+        max_attempts = 5
+        attempt = 0
+        while self.__cyclicprocess.poll() is None and attempt < max_attempts:
+            self._log(Log.DEBUG, f"Sending SIGINT (attempt {attempt + 1}/{max_attempts})")
             os.kill(self.__cyclicprocess.pid, signal.SIGINT)
             time.sleep(2)
+            attempt += 1
 
-        # now parse the histogram output
-        self.__cyclicoutput.seek(0)
-        for line in self.__cyclicoutput:
-            line = bytes.decode(line)
-            if line.startswith('#'):
-                # Catch if cyclictest stopped due to a breaktrace
-                if line.startswith('# Break value: '):
-                    self.__breaktraceval = int(line.split(':')[1])
-                elif line.startswith('# Max Latencies: '):
-                    self._parse_max_latencies(line)
-                continue
+        # Check if process exited
+        exit_code = self.__cyclicprocess.returncode
+        if exit_code is None:
+            # Process still running after max attempts, force kill
+            self._log(Log.WARN, "cyclictest did not respond to SIGINT, sending SIGKILL")
+            os.kill(self.__cyclicprocess.pid, signal.SIGKILL)
+            self.__cyclicprocess.wait()
+            exit_code = self.__cyclicprocess.returncode
+        elif exit_code != 0:
+            self._log(Log.WARN, f"cyclictest exited with non-zero status: {exit_code}")
 
-            # Skipping blank lines
-            if not line:
-                continue
+        # Parse histogram output - use try/finally to ensure _setFinished() is always called
+        # This prevents hangs if parsing fails due to partial output (RHEL-140898)
+        try:
+            self.__cyclicoutput.seek(0)
+            for line in self.__cyclicoutput:
+                line = bytes.decode(line)
+                if line.startswith('#'):
+                    # Catch if cyclictest stopped due to a breaktrace
+                    if line.startswith('# Break value: '):
+                        try:
+                            self.__breaktraceval = int(line.split(':')[1])
+                        except (IndexError, ValueError) as e:
+                            self._log(Log.WARN, f"Error parsing break value: {e}")
+                    elif line.startswith('# Max Latencies: '):
+                        self._parse_max_latencies(line)
+                    continue
 
-            vals = line.split()
-            if not vals:
-                # If we don't have any values, don't try parsing
-                continue
+                # Skipping blank lines
+                if not line:
+                    continue
 
-            try:
-                index = int(vals[0])
-            except:
-                self._log(Log.DEBUG, f"cyclictest: unexpected output: {line}")
-                continue
+                vals = line.split()
+                if not vals:
+                    # If we don't have any values, don't try parsing
+                    continue
 
-            for i, core in enumerate(self.__cpus):
-                self.__cyclicdata[core].bucket(index, int(vals[i+1]))
-                self.__cyclicdata['system'].bucket(index, int(vals[i+1]))
+                try:
+                    index = int(vals[0])
+                except (ValueError, IndexError):
+                    self._log(Log.DEBUG, f"cyclictest: unexpected output: {line}")
+                    continue
 
-        # generate statistics for each RunData object
-        for n in list(self.__cyclicdata.keys()):
-            #print "reducing self.__cyclicdata[%s]" % n
-            self.__cyclicdata[n].reduce()
-            #print self.__cyclicdata[n]
+                for i, core in enumerate(self.__cpus):
+                    try:
+                        self.__cyclicdata[core].bucket(index, int(vals[i+1]))
+                        self.__cyclicdata['system'].bucket(index, int(vals[i+1]))
+                    except (IndexError, ValueError) as e:
+                        # Handle partial output from cyclictest (can happen on SIGINT during cleanup)
+                        self._log(Log.WARN, f"Error parsing cyclictest bucket data for core {core}: {e}")
+                        continue
 
-        self._setFinished()
-        self.__started = False
-        os.close(self.__nullfp)
-        del self.__nullfp
+            # generate statistics for each RunData object
+            for n in list(self.__cyclicdata.keys()):
+                #print "reducing self.__cyclicdata[%s]" % n
+                self.__cyclicdata[n].reduce()
+                #print self.__cyclicdata[n]
+
+        except Exception as e:
+            self._log(Log.ERR, f"Error parsing cyclictest output: {e}")
+        finally:
+            # Always signal completion to avoid hangs
+            self._setFinished()
+            self.__started = False
+            os.close(self.__nullfp)
+            del self.__nullfp
 
 
     def MakeReport(self):
