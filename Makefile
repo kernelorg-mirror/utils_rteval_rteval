@@ -45,11 +45,11 @@ sysreport:
 	[ -d $(HERE)/run ] || mkdir run
 	$(PYTHON) rteval-cmd -D -v --workdir=$(HERE)/run --loaddir=$(HERE)/loadsource --duration=$(D) -i $(HERE)/rteval --sysreport
 
-unittest:
+unit-tests:
 	@echo "Running unit tests..."
 	./run_tests.sh
 
-test: unittest
+tests: unit-tests
 
 clean:
 	rm -f *~ rteval/*~ rteval/*.py[co] *.tar.bz2 *.tar.gz doc/*~
@@ -88,8 +88,8 @@ help:
 	@echo "rteval Makefile targets:"
 	@echo ""
 	@echo "        runit:            do a short testrun locally [default]"
-	@echo "        test:             run unit tests"
-	@echo "        unittest:         run unit tests (same as test)"
+	@echo "        tests:            run unit tests (alias for unit-tests)"
+	@echo "        unit-tests:       run unit tests"
 	@echo "        e2e-tests:        run end-to-end tests"
 	@echo "        regression-tests: run regression tests for measurement modules (requires root)"
 	@echo "        tarfile:          create the source tarball"
@@ -109,4 +109,4 @@ tags:
 cleantags:
 	rm -f tags
 
-.PHONY: test unittest e2e-tests regression-tests
+.PHONY: tests unit-tests e2e-tests regression-tests
