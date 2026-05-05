@@ -56,6 +56,11 @@ if [ -d "tests" ]; then
         run_test "tests/test_measurement_module_selection.py"
     fi
 
+    # Run test_core_sharing_validation.py
+    if [ -f "tests/test_core_sharing_validation.py" ]; then
+        run_test "tests/test_core_sharing_validation.py"
+    fi
+
     # Add more tests here as they are created
     # Example:
     # if [ -f "tests/test_another_feature.py" ]; then
