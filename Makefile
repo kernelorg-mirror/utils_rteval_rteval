@@ -58,7 +58,7 @@ sysreport:
 
 unit-tests:
 	@echo "Running unit tests..."
-	./run_tests.sh
+	./tests/run_tests.sh
 
 tests: unit-tests
 

@@ -15,9 +15,10 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
-# Get the directory where this script is located
+# Get the directory where this script is located (tests/)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
+# Change to repository root (parent of tests/)
+cd "$SCRIPT_DIR/.."
 
 # Test results tracking
 TOTAL_TESTS=0
