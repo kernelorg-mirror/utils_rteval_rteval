@@ -33,6 +33,17 @@ regression-tests:
 	./tests/regression/test-timerlat-error-handling.sh
 	./tests/regression/test-cyclictest-error-handling.sh
 
+cpuset-tests:
+	@echo "Running cpuset integration tests"
+	@echo "These tests require root privileges to create and manage cpusets"
+	@echo ""
+	@if [ "$$(id -u)" != "0" ]; then \
+		echo "ERROR: cpuset-tests must be run as root"; \
+		echo "Usage: sudo make cpuset-tests"; \
+		exit 1; \
+	fi
+	./tests/cpusets/test-cpusets.sh
+
 runit:
 	[ -d $(HERE)/run ] || mkdir run
 	$(PYTHON) rteval-cmd -D -L -v --workdir=$(HERE)/run --loaddir=$(HERE)/loadsource --duration=$(D) -f $(HERE)/rteval.conf -i $(HERE)/rteval $(EXTRA)
@@ -92,6 +103,7 @@ help:
 	@echo "        unit-tests:       run unit tests"
 	@echo "        e2e-tests:        run end-to-end tests"
 	@echo "        regression-tests: run regression tests for measurement modules (requires root)"
+	@echo "        cpuset-tests:     run cpuset integration tests (requires root)"
 	@echo "        tarfile:          create the source tarball"
 	@echo "        install:          install rteval locally"
 	@echo "        clean:            cleanup generated files"
@@ -109,4 +121,4 @@ tags:
 cleantags:
 	rm -f tags
 
-.PHONY: tests unit-tests e2e-tests regression-tests
+.PHONY: tests unit-tests e2e-tests regression-tests cpuset-tests
