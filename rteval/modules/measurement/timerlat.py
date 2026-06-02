@@ -189,6 +189,10 @@ class Timerlat(rtevalModulePrototype):
         self.__cpus = [str(c) for c in expand_cpulist(self.__cpulist)]
         self.__numcores = len(self.__cpus)
 
+        # Logging configuration
+        self._logging = self.__cfg.setdefault('logging', False)
+        self.__reportdir = self.__cfg.setdefault('reportdir', os.getcwd())
+
         # Has tracing been triggered
         self.__stoptrace = False
         # This stores the output from rtla
@@ -218,6 +222,12 @@ class Timerlat(rtevalModulePrototype):
         self._log(Log.DEBUG, f"system using {self.__numcores} cpu cores")
         self.set_latency_test()
 
+    def __open_logfile(self, name):
+        """Open a log file in the reportdir/logs directory"""
+        logdir = os.path.join(self.__reportdir, "logs")
+        if not os.path.exists(logdir):
+            os.makedirs(logdir)
+        return os.open(os.path.join(logdir, name), os.O_CREAT|os.O_RDWR|os.O_TRUNC)
 
     def _WorkloadSetup(self):
         self.__timerlat_process = None
@@ -250,8 +260,14 @@ class Timerlat(rtevalModulePrototype):
                 self.__cmd.append(f'-t={self.__cfg.trace}')
 
         self._log(Log.DEBUG, f'self.__cmd = {self.__cmd}')
-        self.__timerlat_out = tempfile.SpooledTemporaryFile(mode='w+b')
-        self.__timerlat_err = tempfile.SpooledTemporaryFile(mode='w+b')
+
+        # Setup output files - use actual log files if logging enabled, otherwise temp files
+        if self._logging:
+            self.__timerlat_out = self.__open_logfile("timerlat.stdout")
+            self.__timerlat_err = self.__open_logfile("timerlat.stderr")
+        else:
+            self.__timerlat_out = tempfile.SpooledTemporaryFile(mode='w+b')
+            self.__timerlat_err = tempfile.SpooledTemporaryFile(mode='w+b')
 
 
     def _WorkloadTask(self):
@@ -260,8 +276,11 @@ class Timerlat(rtevalModulePrototype):
 
         self._log(Log.DEBUG, f'starting with cmd: {" ".join(self.__cmd)}')
 
-        self.__timerlat_out.seek(0)
-        self.__timerlat_err.seek(0)
+        # Seek to beginning - only needed for temp files, file descriptors start at position 0
+        if not self._logging:
+            self.__timerlat_out.seek(0)
+            self.__timerlat_err.seek(0)
+
         self.__timerlat_process = subprocess.Popen(self.__cmd,
                                                    stdout=self.__timerlat_out,
                                                    stderr=self.__timerlat_err,
@@ -308,14 +327,26 @@ class Timerlat(rtevalModulePrototype):
         # Parse histogram output - use try/finally to ensure _setFinished() is always called
         # This prevents hangs if parsing fails due to partial output (RHEL-140898)
         try:
-            self.__timerlat_out.seek(0)
+            # Read output - handle both file descriptors and temp files
+            if self._logging:
+                # For file descriptors, read the entire file content
+                os.lseek(self.__timerlat_out, 0, os.SEEK_SET)
+                output_data = os.read(self.__timerlat_out, 10*1024*1024)  # Read up to 10MB
+                output_lines = output_data.decode('utf-8', errors='replace').splitlines(keepends=True)
+            else:
+                # For temp files, use seek and iterate
+                self.__timerlat_out.seek(0)
+                output_lines = self.__timerlat_out
 
             blocking_thread_detected = False
             softirq_interference_detected = False
             irq_interference_detected = False
 
-            for line in self.__timerlat_out:
-                line = bytes.decode(line)
+            for line in output_lines:
+                if isinstance(line, bytes):
+                    line = bytes.decode(line)
+                elif not isinstance(line, str):
+                    line = str(line)
 
                 # Skip any blank lines
                 if not line:
@@ -474,8 +505,13 @@ class Timerlat(rtevalModulePrototype):
             self._setFinished()
             self.__started = False
 
-            self.__timerlat_err.close()
-            self.__timerlat_out.close()
+            # Close output files - method differs for file descriptors vs temp files
+            if self._logging:
+                os.close(self.__timerlat_out)
+                os.close(self.__timerlat_err)
+            else:
+                self.__timerlat_out.close()
+                self.__timerlat_err.close()
 
     def MakeReport(self):
         rep_n = libxml2.newNode('timerlat')
