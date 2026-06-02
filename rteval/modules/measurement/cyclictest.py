@@ -212,12 +212,23 @@ class Cyclictest(rtevalModulePrototype):
                                               logfnc=self._log)
         self.__cyclicdata['system'].description = (f"({self.__numcores} cores) ") + info['0']['model name']
 
+        # Logging configuration
+        self._logging = self.__cfg.setdefault('logging', False)
+        self.__reportdir = self.__cfg.setdefault('reportdir', os.getcwd())
+
         self._log(Log.DEBUG, f"system using {self.__numcores} cpu cores")
         self.__started = False
         self.__cyclicoutput = None
         self.__breaktraceval = None
         self.set_latency_test()
 
+
+    def __open_logfile(self, name):
+        """Open a log file in the reportdir/logs directory"""
+        logdir = os.path.join(self.__reportdir, "logs")
+        if not os.path.exists(logdir):
+            os.makedirs(logdir)
+        return os.open(os.path.join(logdir, name), os.O_CREAT|os.O_RDWR|os.O_TRUNC)
 
     @staticmethod
     def __get_debugfs_mount():
@@ -264,8 +275,11 @@ class Cyclictest(rtevalModulePrototype):
         elif self.__cfg.threshold:
             self.__cmd.append(f"-b{int(self.__cfg.threshold)}")
 
-        # Buffer for cyclictest data written to stdout
-        self.__cyclicoutput = tempfile.SpooledTemporaryFile(mode='w+b')
+        # Setup output file - use actual log file if logging enabled, otherwise temp file
+        if self._logging:
+            self.__cyclicoutput = self.__open_logfile("cyclictest.stdout")
+        else:
+            self.__cyclicoutput = tempfile.SpooledTemporaryFile(mode='w+b')
 
 
     def _WorkloadTask(self):
@@ -284,7 +298,10 @@ class Cyclictest(rtevalModulePrototype):
                 fp.write("0")
                 fp.flush()
 
-        self.__cyclicoutput.seek(0)
+        # Seek to beginning - only needed for temp files, file descriptors start at position 0
+        if not self._logging:
+            self.__cyclicoutput.seek(0)
+
         self.__cyclicprocess = subprocess.Popen(self.__cmd,
                                                 stdout=self.__cyclicoutput,
                                                 stderr=self.__nullfp,
@@ -345,9 +362,22 @@ class Cyclictest(rtevalModulePrototype):
         # Parse histogram output - use try/finally to ensure _setFinished() is always called
         # This prevents hangs if parsing fails due to partial output (RHEL-140898)
         try:
-            self.__cyclicoutput.seek(0)
-            for line in self.__cyclicoutput:
-                line = bytes.decode(line)
+            # Read output - handle both file descriptors and temp files
+            if self._logging:
+                # For file descriptors, read the entire file content
+                os.lseek(self.__cyclicoutput, 0, os.SEEK_SET)
+                output_data = os.read(self.__cyclicoutput, 10*1024*1024)  # Read up to 10MB
+                output_lines = output_data.decode('utf-8', errors='replace').splitlines(keepends=True)
+            else:
+                # For temp files, use seek and iterate
+                self.__cyclicoutput.seek(0)
+                output_lines = self.__cyclicoutput
+
+            for line in output_lines:
+                if isinstance(line, bytes):
+                    line = bytes.decode(line)
+                elif not isinstance(line, str):
+                    line = str(line)
                 if line.startswith('#'):
                     # Catch if cyclictest stopped due to a breaktrace
                     if line.startswith('# Break value: '):
@@ -395,6 +425,13 @@ class Cyclictest(rtevalModulePrototype):
             # Always signal completion to avoid hangs
             self._setFinished()
             self.__started = False
+
+            # Close output file - use os.close for file descriptors, .close() for temp files
+            if self._logging:
+                os.close(self.__cyclicoutput)
+            else:
+                self.__cyclicoutput.close()
+
             os.close(self.__nullfp)
             del self.__nullfp
 
