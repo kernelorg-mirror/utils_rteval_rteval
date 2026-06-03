@@ -236,10 +236,14 @@ class Timerlat(rtevalModulePrototype):
         self._setReady()
 
     def _WorkloadPrepare(self):
-        self.__interval = 'interval' in self.__cfg and f'-p{int(self.__cfg.interval)}' or ""
-        self.__cmd = ['rtla', 'timerlat', 'hist', self.__interval, '-P', f'f:{int(self.__priority)}', '-u']
-        self.__cmd.append(f'-c{self.__cpulist}')
-        self.__cmd.append(f'-E{self.__buckets}')
+        # Use space-separated arguments to avoid rtla short option parsing bug
+        # with attached arguments (e.g., -p100 vs -p 100)
+        self.__cmd = ['rtla', 'timerlat', 'hist']
+        if 'interval' in self.__cfg:
+            self.__cmd.extend(['-p', str(int(self.__cfg.interval))])
+        self.__cmd.extend(['-P', f'f:{int(self.__priority)}', '-u'])
+        self.__cmd.extend(['-c', self.__cpulist])
+        self.__cmd.extend(['-E', str(self.__buckets)])
         self.__cmd.append('--no-summary')
         # Disable auto-analysis
         self.__cmd.append('--no-aa')
@@ -251,13 +255,13 @@ class Timerlat(rtevalModulePrototype):
             self.__cmd.append(f'--dma-latency={dma_latency}')
 
         if self.__cfg.stoptrace:
-            self.__cmd.append(f"-T{int(self.__cfg.stoptrace)}")
+            self.__cmd.extend(['-T', str(int(self.__cfg.stoptrace))])
 
         if self.__cfg.trace:
             if not self.__cfg.stoptrace:
                 self._log(Log.WARN, f'Ignoring trace={self.__cfg.trace}, because stoptrace not invoked')
             else:
-                self.__cmd.append(f'-t={self.__cfg.trace}')
+                self.__cmd.extend(['-t', self.__cfg.trace])
 
         self._log(Log.DEBUG, f'self.__cmd = {self.__cmd}')
 
