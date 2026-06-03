@@ -1,42 +1,110 @@
+SPDX-License-Identifier: GPL-2.0-or-later
 
-Rteval is a python program written to evaluate the performance of a
+Rteval is a Python program written to evaluate the performance of a
 realtime Linux kernel on a particular hardware platform. The program
-unpacks source code for two loads: hackbench and a Linux kernel
-compile, then loops running hackbench and a parallel build of the
-Linux kernel. While the loads are running, the cyclictest program is
-run to measure realtime performance under load. When the specified run
-duration is met, the loads are stopped and cyclictest outputs measured
-timer latency values in histogram format, which is analyzed by
-rteval. Rteval then writes an XML file to disk with information about
-the system (gotten through DMI tables), the raw histogram data
-collected during the run and the statistical analysis of the run.
+runs measurement modules (cyclictest or timerlat) to measure scheduling
+and timer latency while simultaneously running system load modules
+(kernel compile, hackbench, stress-ng) to stress the system.
 
-The rteval source may be pulled from it's git tree on kernel.org:
-    git://git.kernel.org/pub/scm/utils/rteval/rteval.git
+When the specified run duration is met, rteval stops the loads and
+measurements, then writes an XML report to disk with information about
+the system (from DMI tables), raw measurement data, and statistical
+analysis including min/max latency, standard deviation, and histograms.
 
-Rteval requires the following packages to run:
+INSTALLATION
+============
+
+The rteval source may be pulled from its git tree on kernel.org:
+    https://git.kernel.org/pub/scm/utils/rteval/rteval.git
+
+Required Dependencies:
 
 Python >= 3.8
-    http://www.python.org/download/
+    https://www.python.org/download/
 
-python-lxml
-  http://lxml.de/
+python3-lxml
+    https://lxml.de/
 
-libxml2-python
-    http://xmlsoft.org/
+python3-libxml2
+    https://xmlsoft.org/
 
-rt-tests
-    git://git.kernel.org/pub/scm/utils/rt-tests/rt-tests.git
+sysstat
+    System performance monitoring tools (sar, iostat, mpstat)
 
-Rteval end-to-end tests additionally require the following packages:
+Measurement Module Requirements (choose one):
 
-Test::Harness
+For cyclictest measurement module:
+  rt-tests (realtime-tests package)
+    https://git.kernel.org/pub/scm/utils/rt-tests/rt-tests.git
+
+For timerlat measurement module (recommended):
+  rtla (part of Linux kernel tools)
+    Requires kernel 5.15+ with CONFIG_OSNOISE_TRACER enabled
+
+Load Module Requirements:
+
+For kcompile load module:
+  rteval-loads package (provides kernel source tarballs)
+    Or manually download kernel sources from https://www.kernel.org/
+
+  Build tools: gcc, binutils, gcc-c++, make, flex, bison, bc,
+               kernel-headers, openssl-devel, perl-interpreter,
+               elfutils-libelf-devel, xz, bzip2, tar, gzip
+
+For stress-ng load module (optional):
+  stress-ng
+    https://github.com/ColinIanKing/stress-ng
+
+System utilities:
+  numactl, dmidecode, procps-ng
+
+Installation:
+
+  $ git clone https://git.kernel.org/pub/scm/utils/rteval/rteval.git
+  $ cd rteval
+  $ sudo make install
+
+For rt-tests (if using cyclictest):
+
+  $ git clone https://git.kernel.org/pub/scm/utils/rt-tests/rt-tests.git
+  $ cd rt-tests
+  $ sudo make prefix=/usr install
+
+TESTING
+=======
+
+Rteval includes unit tests and end-to-end tests. End-to-end tests
+require:
+
+Test::Harness (Perl module)
     https://metacpan.org/pod/Test::Harness
 
-Clark Williams <williams@redhat.com> wrote rteval
+Run tests with:
+  $ make test          # Unit tests
+  $ make e2e-tests     # End-to-end tests (requires root)
 
-David Sommerseth <davids@redhat.com> wrote the XML-RPC and database
-    logic for handling rteval results.
+USAGE
+=====
 
-John Kacur <jkacur at redhat dot com> ported it to python-3.0
-    and has been developing and maintaining it since then.
+Basic usage (requires root):
+
+  $ sudo rteval -d 3600
+
+Run with timerlat measurement module:
+
+  $ sudo rteval -d 3600 --measurement-module timerlat
+
+See the man page for more options:
+
+  $ man rteval
+
+AUTHORS
+=======
+
+Clark Williams <williams at redhat dot com> wrote rteval.
+
+David Sommerseth wrote the XML-RPC and database logic for handling
+    rteval results.
+
+John Kacur <jkacur at redhat dot com> ported it to Python 3 and has
+    been developing and maintaining it since then.

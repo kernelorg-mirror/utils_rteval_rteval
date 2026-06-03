@@ -1,175 +1,317 @@
-.\"                                      Hey, EMACS: -*- nroff -*-
-.TH RTEVAL 8 "august  27, 2009"
-.\" Please adjust this date whenever revising the manpage.
+.\" rteval man page
+.\" SPDX-License-Identifier: GPL-2.0-or-later
+.\" Copyright (C) 2009-2026 Red Hat Inc.
 .\"
-.\" Some roff macros, for reference:
-.\" .nh        disable hyphenation
-.\" .hy        enable hyphenation
-.\" .ad l      left justify
-.\" .ad b      justify to both left and right margins
-.\" .nf        disable filling
-.\" .fi        enable filling
-.\" .br        insert line break
-.\" .sp <n>    insert n+1 empty lines
-.\" for manpage-specific macros, see man(7)
+.TH RTEVAL 8 "June 2026" "rteval 3.10" "System Administration"
 .SH NAME
 rteval \- evaluate latency performance of a realtime Linux system
 .SH SYNOPSIS
 .B rteval
-.RI "[ \-hvsLSDOZ ] [\-d " duration " ] [\-w " workdir " ] [\-l " loaddir " ] \
-[\-X " host " ]"
-
-.\" .SH DESCRIPTION
-.\" This manual page documents briefly the
-.\" .B rteval command.
-.\" .PP
-.\" \fI<whatever>\fP escape sequences to invode bold face and italics, respectively.
-.\" \fBcyclictest\fP is a program that...
-
-The rteval program is used to evaluate the realtime performance of a
-realtime Linux kernel on a particular hardware system. There is
-nothing that actually requires a realtime Linux kernel, but the
-latency measurements will usually be pretty bad on a stock Linux
-kernel.
-
+.RI [ OPTIONS ]
+.SH DESCRIPTION
+The
+.B rteval
+program is used to evaluate the realtime performance of a Linux kernel on a
+particular hardware system. It runs measurement modules (cyclictest or timerlat)
+to measure scheduling and timer latency while simultaneously running system load
+modules (kernel compile, hackbench, stress-ng) to stress the system.
+.PP
+The program runs for a specified duration (default 60 seconds, typically 12+ hours
+for production testing) and generates an XML report containing system information,
+raw measurement data, and statistical analysis including min/max latency, standard
+deviation, and histograms.
+.PP
+Results are stored in a timestamped directory (rteval-YYYYMMDD-N) containing the
+XML report and optional logs.
 
 .SH OPTIONS
-These programs follow the usual GNU command line syntax, with long
-options starting with two dashes ('\-\-').
-.br
-A summary of options is included below.
-.\" For a complete description, see the Info files.
+.SS General Options
 .TP
 .B \-h, \-\-help
-print a help message
-.TP
-.B -d, \-\-duration=DURATION
-Specify the length of the measurement run. DURATION is an integer with
-an optional suffix indicating the units:
-
-.br
-   s - seconds
-.br
-   m - minutes
-.br
-   h - hours
-.br
-   d - days
-.br
-for example to execute a ten minute run of rteval:
-.br
-     $ rteval \-\-duration=10m
-.TP
-.B \-v, \-\-verbose
-Increase the verbosity of output during the test run
-.TP
-.B \-q, \-\-quiet
-Set rteval to run in quiet mode.
-.TP
-.B \-w WORKDIR, \-\-workdir=WORKDIR
-Tell rteval to change directory to WORKDIR before creating any
-subdirectories for report files. The default WORKDIR is the directory
-in which rteval was started.
-.TP
-.B \-l LOADDIR, \-\-loaddir=LOADDIR
-Tell rteval where to find the source for the loads
-.TP
-.B \-i INSTALLDIR, \-\-installdir=INSTALLDIR
-Tell rteval where to locate installed templates.
-.TP
-.B \-s, \-\-sysreport
-Have rteval run the sysreport utility after a run to gather
-information on the running system.
-.TP
-.B \-D, \-\-debug
-Turn on debugging prints during run
-.TP
-.B \-Z, \-\-summarize
-Have rteval summarize an existing report. This will not cause loads or
-meausurement utilities to be run.
-.TP
-.B \-H, \-\-raw-histogram
-Generate raw histogram data for an already existing XML report
-.TP
-.B \-f INIFILE, \-\-inifile=INIFILE
-Initialization file for configuring loads and behavior
-.TP
-.B \-a COMMENT, \-\-annotate=COMMENT
-Add a little annotation which is stored in the report
-.TP
-.B \-L, \-\-logging
-Log the output of the loads in the report directory
-.TP
-.B \-O, \-\-onlyload
-Only run the loads (don't run measurement threads)
+Display help message and exit.
 .TP
 .B \-V, \-\-version
 Print rteval version and exit.
 .TP
-.B \-S KERNEL_VERSION, \-\-source\-download=KERNEL_VERSION
-download a source kernel from kernel.org and exit
+.B \-d, \-\-duration \fIDURATION\fR
+Specify length of test run in seconds (default: 60.0). Can be specified as a
+floating point number (e.g., 1.5 for 90 seconds) or with time suffixes.
+.TP
+.B \-f, \-\-inifile \fIFILE\fR
+Initialization file for configuring loads and behavior.
+.TP
+.B \-w, \-\-workdir \fIDIRECTORY\fR
+Top directory for rteval data (default: current directory).
+.TP
+.B \-i, \-\-installdir \fIDIRECTORY\fR
+Place to locate installed templates (default: /usr/share/rteval).
+.TP
+.B \-l, \-\-loaddir \fIDIRECTORY\fR
+Directory for load source tarballs (default: ./loadsource).
+.TP
+.B \-a, \-\-annotate \fISTRING\fR
+Add an annotation string which is stored in the report.
+.TP
+.B \-D, \-\-debug
+Turn on debug prints (default: False).
+.TP
+.B \-L, \-\-logging
+Log the output of measurement and load modules in the report directory.
+.TP
+.B \-q, \-\-quiet
+Turn on quiet mode (default: False).
+.TP
+.B \-v, \-\-verbose
+Turn on verbose prints (default: False).
+.TP
+.B \-s, \-\-sysreport
+Run sysreport to collect system data (default: False).
+
+.SS Load Control Options
 .TP
 .B \-\-noload
-Only run the measurements (don't run loads)
+Only run the measurements (don't run load modules).
+.TP
+.B \-O, \-\-onlyload
+Only run the loads (don't run measurement threads).
+.TP
+.B \-\-loads\-cpulist \fICPULIST\fR
+CPU list where load modules will run (e.g., 0-3,8-11).
 
-.SH GROUP OPTIONS
+.SS CPU Isolation and Cpuset Options
 .TP
-.B \-\-loads\-cpulist=CPULIST
-List of CPUs where loads will run
+.B \-\-cpusets
+Use cgroup v2 cpusets to isolate measurement and housekeeping workloads.
 .TP
-.B \-\-measurement-cpulist=CPULIST
-List of CPUs where measurement application will run
+.B \-\-housekeeping \fICPULIST\fR
+Isolated CPUs reserved for system tasks (not used by rteval).
 .TP
-.B \-\-measurement-run-on-isolcpus
-Include isolated CPUs in default cpulist
+.B \-\-warn\-non\-isolated\-core\-sharing
+Warn about measurement and load CPUs sharing cores even when neither is isolated.
+.TP
+.B \-\-cleanup\-cpusets
+Remove any leftover rteval cpusets from previous runs and exit.
 
+.SS Measurement Module Options
+.TP
+.B \-\-measurement\-module \fIMODULE\fR
+Select measurement module: cyclictest or timerlat (overrides config file).
+.TP
+.B \-\-measurement\-cpulist \fICPULIST\fR
+CPU list where measurement modules will run.
+.TP
+.B \-\-measurement\-run\-on\-isolcpus
+Include isolated CPUs in default cpulist.
+.TP
+.B \-\-measurement\-idle\-set \fIIDLESTATE\fR
+Idle state depth to set on CPUs running measurement modules.
 
-.SH CYCLICTEST OPTIONS
-These are options that affect the execution behavior of the measurement and load modules.
+.SS Cyclictest Module Options
 .TP
-.B \-\-cyclictest-priority=PRIORITY
-SCHED_FIFO priority for measurement threads (default: 95)
+.B \-\-cyclictest\-interval \fIINTV_US\fR
+Base interval of the threads in microseconds (default: 100).
 .TP
-.B \-\-cyclictest-interval=INTERVAL
-Measurement thread interval in microseconds (default: 100)
+.B \-\-cyclictest\-buckets \fINUM\fR
+Histogram width (default: 3500).
 .TP
-.B \-\-cyclictest-buckets=NBUCKETS
-Number of 1 microsecond histogram buckets (default: 3500)
+.B \-\-cyclictest\-priority \fIPRIO\fR
+Run cyclictest with the given priority (default: 95).
 .TP
-.B \-\-cyclictest-breaktrace=USEC
-Send a break trace command if latency exceeds the given number of microseconds.
+.B \-\-cyclictest\-breaktrace \fIUSEC\fR
+Send a break trace command when latency > USEC.
 .TP
-.B \-\-cyclictest-threshold=USEC
-Exit rteval if latency exceeds the given number of microseconds.
-.SH STRESS-NG OPTIONS
+.B \-\-cyclictest\-threshold \fIUSEC\fR
+Exit rteval if latency > USEC.
+
+.SS Timerlat Module Options
 .TP
-.B \-\-stressng-option=OPTION
-Pass in command line options for the stress-ng package.
+.B \-\-timerlat\-interval \fIINTV_US\fR
+Base interval or period of threads in microseconds (default: 100).
 .TP
-.B \-\-stressng-arg=ARG
-Pass in command line arguments for the stress-ng package.
+.B \-\-timerlat\-priority \fIPRIO\fR
+Run rtla timerlat with this priority (default: 95).
 .TP
-.B \-\-stressng-timeout=T
+.B \-\-timerlat\-buckets \fINUM\fR
+Number of histogram buckets (default: 3500).
+.TP
+.B \-\-timerlat\-stoptrace \fIUSEC\fR
+Stop trace if thread latency higher than USEC.
+.TP
+.B \-\-timerlat\-trace \fIFILE\fR
+File to save trace to.
+.TP
+.B \-\-timerlat\-dma_latency \fIUSEC\fR
+Set /dev/cpu_dma_latency to USEC (set to None to disable) (default: 0).
+
+.SS Hackbench Load Module Options
+.TP
+.B \-\-hackbench\-jobspercore \fINUM\fR
+Number of working threads per CPU core (default: 5).
+.TP
+.B \-\-hackbench\-runlowmem \fITrue|False\fR
+Run hackbench on machines where low memory is detected.
+
+.SS Kcompile Load Module Options
+.TP
+.B \-\-kcompile\-source \fITARBALL\fR
+Source tar ball (default: linux-6.17.7.tar.xz).
+.TP
+.B \-\-kcompile\-jobspercore \fINUM\fR
+Number of working threads per core (default: 2).
+
+.SS Stress-ng Load Module Options
+.TP
+.B \-\-stressng\-option \fIOPTION\fR
+Stressor specific option.
+.TP
+.B \-\-stressng\-arg \fIARG\fR
+Stressor specific arg.
+.TP
+.B \-\-stressng\-timeout \fIT\fR
 Timeout after T seconds.
 
-.SH FILES
-.BR rteval-YYYYMMDD-S
-This is a directory created by rteval to hold the summary.xml file as
-well as other files collected on the system. It is the current Year,
-Month, and Day, followed by a sequence number for multiple runs on the
-same day.
+.SS Report Analysis Options
+.TP
+.B \-H, \-\-raw\-histogram \fIXMLFILE\fR [\fIXMLFILE\fR ...]
+Generate raw histogram data for one or more already existing XML reports.
+.TP
+.B \-Z, \-\-summarize \fIXMLFILE\fR [\fIXMLFILE\fR ...]
+Summarize one or more already existing XML reports.
+.TP
+.B \-S, \-\-source\-download [\fIKERNEL_VERSION\fR]
+Download a source kernel from kernel.org and exit.
 
-.BR summary.xml
-This is an XML file that contains information about a test run and the
-host system upon which rteval was run.
-.BR dmesg
-This is the output of the dmesg(1) program immediately following
-system boot. It is copied from /var/log/dmesg.
+.SH EXAMPLES
+.SS Basic Usage
+Run a 60-second test with default settings (cyclictest measurement, kernel compile and hackbench loads):
+.PP
+.nf
+.RS
+sudo rteval
+.RE
+.fi
+
+.SS Long Duration Test
+Run a 12-hour test with timerlat measurement:
+.PP
+.nf
+.RS
+sudo rteval -d 43200 --measurement-module timerlat
+.RE
+.fi
+
+.SS Measurement Only
+Run timerlat measurement without any load modules:
+.PP
+.nf
+.RS
+sudo rteval -d 600 --measurement-module timerlat --noload
+.RE
+.fi
+
+.SS With Logging and Annotation
+Run with logging enabled and add an annotation to the report:
+.PP
+.nf
+.RS
+sudo rteval -d 3600 -L -a "Testing kernel 6.17.7"
+.RE
+.fi
+
+.SS CPU Isolation with Cpusets
+Run with cpusets to isolate measurement on cores 0-3, loads on cores 4-15, and reserve core 0 for housekeeping:
+.PP
+.nf
+.RS
+sudo rteval --cpusets --measurement-cpulist 1-3 \\
+       --loads-cpulist 4-15 --housekeeping 0
+.RE
+.fi
+
+.SS Custom Timerlat Configuration
+Run timerlat with custom interval and stop trace threshold:
+.PP
+.nf
+.RS
+sudo rteval -d 1800 --measurement-module timerlat \\
+       --timerlat-interval 1000 --timerlat-stoptrace 100
+.RE
+.fi
+
+.SS Analyze Existing Reports
+Summarize multiple existing XML reports:
+.PP
+.nf
+.RS
+rteval -Z rteval-20260601-1/summary.xml \\
+          rteval-20260602-1/summary.xml
+.RE
+.fi
+
+.SH FILES
+.TP
+.I rteval-YYYYMMDD-N/
+Report directory created for each run, containing:
+.RS
+.TP
+.I summary.xml
+XML report with system info, measurements, and statistics
+.TP
+.I logs/
+Directory containing measurement and load module logs (with -L option)
+.RE
+
+.SH MEASUREMENT MODULES
+.TP
+.B cyclictest
+Measures scheduling latency by running high-priority SCHED_FIFO threads that sleep
+for a specified interval and measure wakeup latency. This is the traditional measurement
+tool for realtime Linux testing.
+.TP
+.B timerlat
+Uses the rtla (Real-Time Linux Analysis) tool's timerlat tracer to measure timer latency.
+This is a more modern approach that leverages kernel tracing infrastructure and can provide
+more detailed analysis of latency sources.
+
+.SH LOAD MODULES
+.TP
+.B kcompile
+Performs parallel kernel compilation to create CPU and I/O load. Compiles with
+allmodconfig to maximize compilation work.
+.TP
+.B hackbench
+Scheduler stress test that creates pairs of threads exchanging data via pipes or
+sockets, exercising the kernel scheduler.
+.TP
+.B stress-ng
+Flexible stress testing tool with many stressor options for CPU, memory, I/O, and more.
+
+.SH NOTES
+.PP
+Root privileges are required to run rteval as it needs to set real-time scheduling
+priorities and access system resources.
+.PP
+For production testing, run for at least 12-24 hours to capture rare latency events.
+The default 60-second duration is only suitable for quick validation.
+.PP
+When using cpusets (--cpusets), ensure your kernel has cgroup v2 support and the
+cpuset controller is available.
+.PP
+The timerlat measurement module requires a kernel with rtla support (kernel 5.15+
+with CONFIG_OSNOISE_TRACER enabled).
 
 .SH SEE ALSO
-.BR cyclictest(8).
-.br
-.SH AUTHOR
-rteval was written by Clark Williams <williams@redhat.com>
+.BR cyclictest (8),
+.BR rtla (1),
+.BR rtla-timerlat (1),
+.BR stress-ng (1)
+
+.SH AUTHORS
+rteval was written by Clark Williams, David Sommerseth, and John Kacur.
 .PP
-XML-RPC and database code by David Sommerseth <davids@redhat.com>
+This manual page was written for rteval 3.10 in June 2026.
+
+.SH REPORTING BUGS
+Report bugs to linux-rt-users@vger.kernel.org
+.PP
+CC: John Kacur <jkacur at redhat.com>, Clark Williams <williams at redhat.com>
