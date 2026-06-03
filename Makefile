@@ -94,6 +94,29 @@ rteval-$(VERSION).tar.bz2:
 	mv dist/rteval-$(VERSION).tar.bz2 .
 	rmdir dist
 
+uninstall:
+	@echo "Uninstalling rteval..."
+	# Remove the rteval script
+	rm -f $(DESTDIR)$(PREFIX)/bin/rteval
+	# Remove man page
+	rm -f $(DESTDIR)$(PREFIX)/share/man/man8/rteval.8.gz
+	# Remove XSL files
+	rm -f $(DATADIR)/rteval/rteval_*.xsl
+	# Note: Leaving /etc/rteval.conf in place (remove manually if needed)
+	# Remove load files
+	rm -rf $(DATADIR)/rteval/loadsource
+	# Remove rteval data directory if empty
+	rmdir $(DATADIR)/rteval 2>/dev/null || true
+	# Uninstall Python package
+	@if $(PYTHON) -m pip show rteval 2>/dev/null | grep -q "Location: /usr"; then \
+		echo "Uninstalling rteval Python package..."; \
+		$(PYTHON) -m pip uninstall -y rteval; \
+	elif $(PYTHON) -m pip show rteval >/dev/null 2>&1; then \
+		echo "rteval found in pip but points to source directory (not removing)"; \
+	else \
+		echo "rteval Python package not found (may have been installed via RPM)"; \
+	fi
+
 help:
 	@echo ""
 	@echo "rteval Makefile targets:"
@@ -106,6 +129,7 @@ help:
 	@echo "        cpuset-tests:     run cpuset integration tests (requires root)"
 	@echo "        tarfile:          create the source tarball"
 	@echo "        install:          install rteval locally"
+	@echo "        uninstall:        uninstall rteval"
 	@echo "        clean:            cleanup generated files"
 	@echo "        realclean:        Same as clean plus directory run"
 	@echo "        sysreport:        do a short testrun and generate sysreport data"
@@ -121,4 +145,4 @@ tags:
 cleantags:
 	rm -f tags
 
-.PHONY: tests unit-tests e2e-tests regression-tests cpuset-tests
+.PHONY: tests unit-tests e2e-tests regression-tests cpuset-tests uninstall

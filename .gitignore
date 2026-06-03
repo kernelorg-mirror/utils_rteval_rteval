@@ -29,3 +29,4 @@ stamp-h1
 autom4te.cache/
 rteval-[0-9]*
 local/
+tags

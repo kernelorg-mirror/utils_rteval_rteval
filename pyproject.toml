@@ -18,7 +18,7 @@ analyzed for standard statistical measurements (i.e mode, median, range,
 mean, variance and standard deviation) and a report is generated.
 """, content-type = "text/plain"}
 requires-python = ">=3.10"
-license = {text = "GPL-2.0-or-later"}
+license = "GPL-2.0-or-later"
 dependencies = [
     "lxml",
     "requests",
