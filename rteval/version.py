@@ -5,4 +5,4 @@
 #   Copyright 2024  John Kacur <jkacurWredhat.com>
 #
 
-RTEVAL_VERSION = '3.10'
+RTEVAL_VERSION = '3.11'
