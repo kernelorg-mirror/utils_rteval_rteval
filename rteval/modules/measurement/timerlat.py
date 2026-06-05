@@ -480,6 +480,13 @@ class Timerlat(rtevalModulePrototype):
                     self._log(Log.DEBUG, f'timerlat: unexpected output: {line}')
                     continue
 
+                # Validate line has expected number of fields: 1 index + (cores * 3 values)
+                expected_fields = 1 + self.__numcores * 3
+                if len(vals) < expected_fields:
+                    self._log(Log.DEBUG, f'Skipping incomplete histogram line at bucket {index} '
+                              f'({len(vals)} fields, expected {expected_fields})')
+                    continue
+
                 for i, core in enumerate(self.__cpus):
                     # There might not be a count on every cpu if tracing invoked
                     try:
@@ -495,7 +502,8 @@ class Timerlat(rtevalModulePrototype):
                                                          int(vals[i*3+3]))
                     except (IndexError, ValueError) as e:
                         # Handle partial output from rtla (can happen on SIGINT during cleanup)
-                        self._log(Log.WARN, f"Error parsing timerlat bucket data for core {core}: {e}")
+                        self._log(Log.DEBUG, f"Skipping incomplete bucket data for core {core} "
+                                  f"(expected during process termination): {e}")
                         continue
 
                 # Generate statistics for each RunData object
