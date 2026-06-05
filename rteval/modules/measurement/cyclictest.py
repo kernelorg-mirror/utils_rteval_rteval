@@ -404,13 +404,21 @@ class Cyclictest(rtevalModulePrototype):
                     self._log(Log.DEBUG, f"cyclictest: unexpected output: {line}")
                     continue
 
+                # Validate line has expected number of fields: 1 index + (cores * 1 value)
+                expected_fields = 1 + self.__numcores
+                if len(vals) < expected_fields:
+                    self._log(Log.DEBUG, f'Skipping incomplete histogram line at bucket {index} '
+                              f'({len(vals)} fields, expected {expected_fields})')
+                    continue
+
                 for i, core in enumerate(self.__cpus):
                     try:
                         self.__cyclicdata[core].bucket(index, int(vals[i+1]))
                         self.__cyclicdata['system'].bucket(index, int(vals[i+1]))
                     except (IndexError, ValueError) as e:
                         # Handle partial output from cyclictest (can happen on SIGINT during cleanup)
-                        self._log(Log.WARN, f"Error parsing cyclictest bucket data for core {core}: {e}")
+                        self._log(Log.DEBUG, f"Skipping incomplete bucket data for core {core} "
+                                  f"(expected during process termination): {e}")
                         continue
 
             # generate statistics for each RunData object
