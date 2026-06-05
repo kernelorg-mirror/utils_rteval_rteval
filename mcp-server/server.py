@@ -273,6 +273,30 @@ async def list_tools() -> list[Tool]:
                 "required": ["log_path"],
             },
         ),
+        Tool(
+            name="batch_analysis",
+            description="Analyze multiple rteval result files and aggregate statistics",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "directory": {
+                        "type": "string",
+                        "description": "Directory to search for rteval results (default: current directory)",
+                    },
+                    "pattern": {
+                        "type": "string",
+                        "description": "File pattern to match (default: *.xml)",
+                        "default": "*.xml",
+                    },
+                    "recursive": {
+                        "type": "boolean",
+                        "description": "Search subdirectories recursively (default: false)",
+                        "default": False,
+                    },
+                },
+                "required": [],
+            },
+        ),
     ]
 
 
@@ -713,6 +737,156 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
             return [TextContent(
                 type="text",
                 text=f"Error reading log file: {str(e)}"
+            )]
+
+    elif name == "batch_analysis":
+        directory = arguments.get("directory", ".")
+        pattern = arguments.get("pattern", "*.xml")
+        recursive = arguments.get("recursive", False)
+
+        try:
+            path = Path(directory)
+            if not path.exists():
+                return [TextContent(
+                    type="text",
+                    text=f"Error: Directory '{directory}' does not exist"
+                )]
+
+            # Find matching files
+            if recursive:
+                files = list(path.rglob(pattern))
+            else:
+                files = list(path.glob(pattern))
+
+            if not files:
+                return [TextContent(
+                    type="text",
+                    text=f"No files matching '{pattern}' found in '{directory}'"
+                )]
+
+            # Parse each file and collect data
+            results = []
+            parse_errors = []
+
+            for file_path in files:
+                try:
+                    data = extract_rteval_data(str(file_path))
+                    results.append(data)
+                except Exception as e:
+                    parse_errors.append(f"{file_path.name}: {str(e)}")
+
+            if not results:
+                error_msg = "Failed to parse any result files"
+                if parse_errors:
+                    error_msg += ":\n" + "\n".join(parse_errors)
+                return [TextContent(type="text", text=error_msg)]
+
+            # Build output
+            result = f"Batch Analysis of {len(results)} rteval Result(s)\n"
+            result += "=" * 60 + "\n\n"
+
+            if parse_errors:
+                result += f"Warning: Failed to parse {len(parse_errors)} file(s)\n\n"
+
+            # Individual file summaries
+            result += "Individual Results:\n"
+            result += "-" * 60 + "\n"
+
+            max_latencies = []
+            mean_latencies = []
+            dates = []
+
+            for data in results:
+                file_name = Path(data["file"]).name
+                result += f"\n{file_name}:\n"
+
+                # Date
+                if "date" in data["run_info"] and "time" in data["run_info"]:
+                    date_str = f"{data['run_info']['date']} {data['run_info']['time']}"
+                    result += f"  Date: {date_str}\n"
+                    dates.append(date_str)
+
+                # Duration
+                ri = data["run_info"]
+                if any(k in ri for k in ["days", "hours", "minutes", "seconds"]):
+                    result += f"  Duration: {ri.get('days', 0)}d {ri.get('hours', 0)}h "
+                    result += f"{ri.get('minutes', 0)}m {ri.get('seconds', 0)}s\n"
+
+                # System
+                if "kernel" in data["system_info"]:
+                    result += f"  Kernel: {data['system_info']['kernel']}"
+                    if "is_RT" in data["system_info"]:
+                        result += f" (RT: {'Yes' if data['system_info']['is_RT'] else 'No'})"
+                    result += "\n"
+
+                # Measurements - timerlat
+                if "timerlat" in data["measurements"]:
+                    meas = data["measurements"]["timerlat"]
+                    if "maximum" in meas:
+                        max_val = meas["maximum"]["value"]
+                        max_unit = meas["maximum"]["unit"]
+                        result += f"  Max Latency: {max_val} {max_unit}\n"
+                        try:
+                            max_latencies.append(float(max_val))
+                        except ValueError:
+                            pass
+                    if "mean" in meas:
+                        mean_val = meas["mean"]["value"]
+                        mean_unit = meas["mean"]["unit"]
+                        result += f"  Mean Latency: {mean_val} {mean_unit}\n"
+                        try:
+                            mean_latencies.append(float(mean_val))
+                        except ValueError:
+                            pass
+
+                # Measurements - cyclictest
+                elif "cyclictest" in data["measurements"]:
+                    meas = data["measurements"]["cyclictest"]
+                    if "maximum" in meas:
+                        max_val = meas["maximum"]["value"]
+                        max_unit = meas["maximum"]["unit"]
+                        result += f"  Max Latency: {max_val} {max_unit}\n"
+                        try:
+                            max_latencies.append(float(max_val))
+                        except ValueError:
+                            pass
+                    if "mean" in meas:
+                        mean_val = meas["mean"]["value"]
+                        mean_unit = meas["mean"]["unit"]
+                        result += f"  Mean Latency: {mean_val} {mean_unit}\n"
+                        try:
+                            mean_latencies.append(float(mean_val))
+                        except ValueError:
+                            pass
+
+            # Aggregate statistics
+            result += "\n" + "=" * 60 + "\n"
+            result += "Aggregate Statistics:\n"
+            result += "-" * 60 + "\n\n"
+
+            result += f"Total files analyzed: {len(results)}\n"
+
+            if dates:
+                result += f"Date range: {min(dates)} to {max(dates)}\n"
+
+            if max_latencies:
+                result += f"\nMaximum Latencies:\n"
+                result += f"  Lowest max: {min(max_latencies):.2f} µs\n"
+                result += f"  Highest max: {max(max_latencies):.2f} µs\n"
+                result += f"  Average max: {sum(max_latencies) / len(max_latencies):.2f} µs\n"
+
+            if mean_latencies:
+                result += f"\nMean Latencies:\n"
+                result += f"  Lowest mean: {min(mean_latencies):.2f} µs\n"
+                result += f"  Highest mean: {max(mean_latencies):.2f} µs\n"
+                result += f"  Average mean: {sum(mean_latencies) / len(mean_latencies):.2f} µs\n"
+
+            return [TextContent(type="text", text=result)]
+
+        except Exception as e:
+            return [TextContent(
+                type="text",
+                text=f"Error in batch analysis: {str(e)}"
             )]
 
     else:
