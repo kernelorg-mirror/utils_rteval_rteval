@@ -1,0 +1,20 @@
+{
+  "manifest_version": "0.2",
+  "name": "rteval",
+  "version": "0.1.0",
+  "description": "rteval test results analysis - query and compare real-time evaluation test results",
+  "author": {
+    "name": "John Kacur",
+    "email": "jkacur@redhat.com"
+  },
+  "server": {
+    "type": "python",
+    "entry_point": "server.py",
+    "mcp_config": {
+      "command": "python3",
+      "args": [
+        "/home/jkacur/src/rteval/mcp-server/server.py"
+      ]
+    }
+  }
+}

@@ -26,13 +26,46 @@ The initial focus is on multi-run analysis rather than single-result querying.
 
 ## Installation
 
+On Fedora:
 ```bash
-pip install -r requirements.txt
+sudo dnf install python3-mcp python3-mcp+cli python3-lxml
 ```
+
+## Available Tools
+
+- **list_results**: List rteval result files in a directory
+- **parse_result**: Parse an rteval XML result file and extract key metrics
+- **compare_results**: Compare two rteval result files side-by-side
+- **list_logs**: List available log files in an rteval result directory
+- **read_log**: Read log content with optional filtering (head/tail/grep)
 
 ## Usage
 
-TBD - Server configuration and client usage instructions to be added.
+### Testing the Server Directly
+
+```bash
+python3 test_tools.py
+```
+
+### Using with Claude Code
+
+The server is configured as a Claude Code plugin. After installation:
+
+1. The server is registered in `~/.claude/plugins/installed_plugins.json`
+2. Enabled in `~/.claude/settings.json`
+3. Restart Claude Code to load the plugin
+4. Tools will be available with the prefix: `mcp__plugin_rteval-mcp_rteval__`
+
+Example:
+```
+list rteval results in ~/src/rteval
+```
+
+### Using with MCP Inspector
+
+```bash
+mcp dev server.py
+```
 
 ## Development
 
