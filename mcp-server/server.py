@@ -145,6 +145,46 @@ async def list_tools() -> list[Tool]:
                 "required": ["file1", "file2"],
             },
         ),
+        Tool(
+            name="list_logs",
+            description="List available log files in an rteval result directory",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "result_dir": {
+                        "type": "string",
+                        "description": "Path to rteval result directory (e.g., rteval-20260605-1)",
+                    },
+                },
+                "required": ["result_dir"],
+            },
+        ),
+        Tool(
+            name="read_log",
+            description="Read content from an rteval log file",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "log_path": {
+                        "type": "string",
+                        "description": "Path to the log file",
+                    },
+                    "tail": {
+                        "type": "integer",
+                        "description": "Read last N lines (optional)",
+                    },
+                    "head": {
+                        "type": "integer",
+                        "description": "Read first N lines (optional)",
+                    },
+                    "grep": {
+                        "type": "string",
+                        "description": "Search for pattern in log (optional)",
+                    },
+                },
+                "required": ["log_path"],
+            },
+        ),
     ]
 
 
@@ -420,6 +460,123 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
             return [TextContent(
                 type="text",
                 text=f"Error comparing results: {str(e)}"
+            )]
+
+    elif name == "list_logs":
+        result_dir = arguments["result_dir"]
+
+        try:
+            dir_path = Path(result_dir)
+            if not dir_path.exists():
+                return [TextContent(
+                    type="text",
+                    text=f"Error: Directory '{result_dir}' does not exist"
+                )]
+
+            logs_dir = dir_path / "logs"
+            if not logs_dir.exists():
+                return [TextContent(
+                    type="text",
+                    text=f"Error: Logs directory not found in '{result_dir}'"
+                )]
+
+            log_files = sorted(logs_dir.glob("*"))
+
+            if not log_files:
+                return [TextContent(
+                    type="text",
+                    text=f"No log files found in '{logs_dir}'"
+                )]
+
+            result = f"Log files in {logs_dir}:\n\n"
+
+            # Group by type (stdout vs stderr)
+            stdout_files = [f for f in log_files if f.name.endswith('.stdout')]
+            stderr_files = [f for f in log_files if f.name.endswith('.stderr')]
+
+            if stdout_files:
+                result += "Standard Output Logs:\n"
+                for f in stdout_files:
+                    size = f.stat().st_size
+                    result += f"  {f.name}\n"
+                    result += f"    Size: {size:,} bytes\n"
+                    result += f"    Path: {f}\n"
+                result += "\n"
+
+            if stderr_files:
+                result += "Standard Error Logs:\n"
+                for f in stderr_files:
+                    size = f.stat().st_size
+                    result += f"  {f.name}\n"
+                    result += f"    Size: {size:,} bytes\n"
+                    result += f"    Path: {f}\n"
+                result += "\n"
+
+            return [TextContent(type="text", text=result)]
+
+        except Exception as e:
+            return [TextContent(
+                type="text",
+                text=f"Error listing logs: {str(e)}"
+            )]
+
+    elif name == "read_log":
+        log_path = arguments["log_path"]
+        tail = arguments.get("tail")
+        head = arguments.get("head")
+        grep = arguments.get("grep")
+
+        try:
+            path = Path(log_path)
+            if not path.exists():
+                return [TextContent(
+                    type="text",
+                    text=f"Error: Log file '{log_path}' does not exist"
+                )]
+
+            # Read the file
+            with open(path, 'r', errors='replace') as f:
+                lines = f.readlines()
+
+            total_lines = len(lines)
+
+            # Apply filters
+            if grep:
+                lines = [line for line in lines if grep in line]
+                result = f"Log file: {path.name}\n"
+                result += f"Filtered by: '{grep}'\n"
+                result += f"Matching lines: {len(lines)} / {total_lines}\n"
+                result += "=" * 60 + "\n"
+            else:
+                result = f"Log file: {path.name}\n"
+                result += f"Total lines: {total_lines}\n"
+                result += "=" * 60 + "\n"
+
+            if tail:
+                lines = lines[-tail:]
+                result += f"(showing last {tail} lines)\n\n"
+            elif head:
+                lines = lines[:head]
+                result += f"(showing first {head} lines)\n\n"
+            elif not grep:
+                # Default: show first 100 lines if no filter specified
+                if len(lines) > 100:
+                    lines = lines[:100]
+                    result += f"(showing first 100 of {total_lines} lines)\n\n"
+
+            result += "".join(lines)
+
+            # Warn if file was very large
+            if total_lines > 10000 and not (tail or head or grep):
+                result += f"\n\n[Note: File has {total_lines} lines. "
+                result += "Consider using --tail, --head, or --grep to filter]"
+
+            return [TextContent(type="text", text=result)]
+
+        except Exception as e:
+            return [TextContent(
+                type="text",
+                text=f"Error reading log file: {str(e)}"
             )]
 
     else:
