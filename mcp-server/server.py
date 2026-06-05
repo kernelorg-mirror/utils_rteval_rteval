@@ -21,6 +21,94 @@ from mcp.types import Tool, TextContent
 app = Server("rteval-mcp-server")
 
 
+def parse_rtla_command(cmd_line: str) -> dict[str, str]:
+    """Parse rtla timerlat or cyclictest command line into parameters."""
+    params = {}
+
+    if not cmd_line:
+        return params
+
+    parts = cmd_line.split()
+    i = 0
+
+    while i < len(parts):
+        arg = parts[i]
+
+        # Period parameter
+        if arg in ['-p', '--period']:
+            if i + 1 < len(parts):
+                params['period'] = f"{parts[i + 1]} µs"
+                i += 2
+                continue
+
+        # Priority/scheduling parameter
+        elif arg in ['-P', '--priority']:
+            if i + 1 < len(parts):
+                prio = parts[i + 1]
+                # Parse format like "f:95" or "r:95"
+                if ':' in prio:
+                    policy, level = prio.split(':', 1)
+                    policy_name = {'f': 'FIFO', 'r': 'RR', 'o': 'OTHER'}.get(policy, policy)
+                    params['scheduling'] = f"{policy_name} priority {level}"
+                else:
+                    params['scheduling'] = prio
+                i += 2
+                continue
+
+        # CPU list parameter
+        elif arg in ['-c', '--cpus']:
+            if i + 1 < len(parts):
+                params['cpus'] = parts[i + 1]
+                i += 2
+                continue
+
+        # Exit/stop threshold
+        elif arg in ['-E', '--stop', '--stop-total']:
+            if i + 1 < len(parts):
+                params['exit_threshold'] = f"{parts[i + 1]} µs"
+                i += 2
+                continue
+
+        # DMA latency
+        elif arg.startswith('--dma-latency='):
+            value = arg.split('=', 1)[1]
+            params['dma_latency'] = value
+            i += 1
+            continue
+
+        # Duration
+        elif arg in ['-D', '--duration']:
+            if i + 1 < len(parts):
+                params['duration'] = parts[i + 1]
+                i += 2
+                continue
+
+        # Unit flags
+        elif arg in ['-u', '--us']:
+            params['unit'] = 'microseconds'
+            i += 1
+            continue
+        elif arg in ['-n', '--ns']:
+            params['unit'] = 'nanoseconds'
+            i += 1
+            continue
+
+        # Boolean flags
+        elif arg == '--no-summary':
+            params['summary'] = 'disabled'
+            i += 1
+            continue
+        elif arg == '--no-aa':
+            params['auto_analysis'] = 'disabled'
+            i += 1
+            continue
+
+        else:
+            i += 1
+
+    return params
+
+
 def extract_rteval_data(file_path: str) -> dict[str, Any]:
     """Extract key data from an rteval XML file for comparison."""
     tree = ET.parse(file_path)
@@ -292,7 +380,31 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
             if timerlat is not None:
                 result += "Timerlat Measurements:\n"
                 cmd_line = timerlat.get("command_line", "")
-                result += f"  Command: {cmd_line}\n\n"
+                result += f"  Command: {cmd_line}\n"
+
+                # Parse and display command parameters
+                params = parse_rtla_command(cmd_line)
+                if params:
+                    result += "\n  Parsed Parameters:\n"
+                    if 'period' in params:
+                        result += f"    Period: {params['period']} (-p)\n"
+                    if 'scheduling' in params:
+                        result += f"    Scheduling: {params['scheduling']} (-P)\n"
+                    if 'cpus' in params:
+                        result += f"    CPUs: {params['cpus']} (-c)\n"
+                    if 'exit_threshold' in params:
+                        result += f"    Exit threshold: {params['exit_threshold']} (-E)\n"
+                    if 'dma_latency' in params:
+                        result += f"    DMA latency: {params['dma_latency']} (--dma-latency)\n"
+                    if 'duration' in params:
+                        result += f"    Duration: {params['duration']} (-D)\n"
+                    if 'unit' in params:
+                        result += f"    Unit: {params['unit']}\n"
+                    if 'summary' in params:
+                        result += f"    Summary: {params['summary']}\n"
+                    if 'auto_analysis' in params:
+                        result += f"    Auto-analysis: {params['auto_analysis']}\n"
+                result += "\n"
 
                 stats = timerlat.find(".//statistics")
                 if stats is not None:
@@ -308,7 +420,31 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
             if cyclictest is not None:
                 result += "Cyclictest Measurements:\n"
                 cmd_line = cyclictest.get("command_line", "")
-                result += f"  Command: {cmd_line}\n\n"
+                result += f"  Command: {cmd_line}\n"
+
+                # Parse and display command parameters
+                params = parse_rtla_command(cmd_line)
+                if params:
+                    result += "\n  Parsed Parameters:\n"
+                    if 'period' in params:
+                        result += f"    Period: {params['period']} (-p)\n"
+                    if 'scheduling' in params:
+                        result += f"    Scheduling: {params['scheduling']} (-P)\n"
+                    if 'cpus' in params:
+                        result += f"    CPUs: {params['cpus']} (-c)\n"
+                    if 'exit_threshold' in params:
+                        result += f"    Exit threshold: {params['exit_threshold']} (-E)\n"
+                    if 'dma_latency' in params:
+                        result += f"    DMA latency: {params['dma_latency']} (--dma-latency)\n"
+                    if 'duration' in params:
+                        result += f"    Duration: {params['duration']} (-D)\n"
+                    if 'unit' in params:
+                        result += f"    Unit: {params['unit']}\n"
+                    if 'summary' in params:
+                        result += f"    Summary: {params['summary']}\n"
+                    if 'auto_analysis' in params:
+                        result += f"    Auto-analysis: {params['auto_analysis']}\n"
+                result += "\n"
 
                 stats = cyclictest.find(".//statistics")
                 if stats is not None:
