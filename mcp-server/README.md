@@ -33,9 +33,18 @@ sudo dnf install python3-mcp python3-mcp+cli python3-lxml
 
 ## Available Tools
 
+### Basic Analysis
 - **list_results**: List rteval result files in a directory
 - **parse_result**: Parse an rteval XML result file and extract key metrics
 - **compare_results**: Compare two rteval result files side-by-side
+- **batch_analysis**: Analyze multiple rteval result files and aggregate statistics
+
+### Query & Filter
+- **filter_results**: Filter rteval results by kernel version, date range, test duration, and latency thresholds
+- **find_best_worst**: Find best and worst rteval runs based on latency metrics (maximum, mean, or median)
+- **compare_to_baseline**: Compare multiple results against a baseline file and detect regressions
+
+### Log Access
 - **list_logs**: List available log files in an rteval result directory
 - **read_log**: Read log content with optional filtering (head/tail/grep)
 
@@ -56,9 +65,40 @@ The server is configured as a Claude Code plugin. After installation:
 3. Restart Claude Code to load the plugin
 4. Tools will be available with the prefix: `mcp__plugin_rteval-mcp_rteval__`
 
-Example:
+Example queries:
 ```
 list rteval results in ~/src/rteval
+find the best and worst rteval runs
+show me rteval results with kernel 7.0
+compare rteval results to a baseline
+```
+
+### Query & Filter Examples
+
+**Find best and worst runs:**
+```
+Find the 3 best and worst rteval runs by maximum latency
+Which rteval runs had the lowest mean latency?
+```
+
+**Filter by criteria:**
+```
+Show me rteval results with kernel version 7.0
+Find rteval results from June 2026
+Show results with max latency under 3500 microseconds
+Filter rteval results by RT kernel
+```
+
+**Baseline comparison:**
+```
+Compare all rteval results to rteval-20260605-1/summary.xml
+Check for regressions against the baseline with 5% threshold
+```
+
+**Batch analysis:**
+```
+Analyze all rteval results and show aggregate statistics
+What's the average max latency across all runs?
 ```
 
 ### Using with MCP Inspector
@@ -66,6 +106,45 @@ list rteval results in ~/src/rteval
 ```bash
 mcp dev server.py
 ```
+
+## Features in Detail
+
+### filter_results
+Filter rteval results by multiple criteria:
+- **kernel_pattern**: Match kernel version (e.g., "7.0", "rt", "6.17")
+- **is_rt**: Filter by RT kernel (true/false)
+- **date_from/date_to**: Date range filter (YYYY-MM-DD format)
+- **min_duration_minutes**: Minimum test duration
+- **max_latency_threshold**: Maximum acceptable latency in µs
+
+Example: Find all RT kernel runs from June 2026 with max latency under 4000 µs
+
+### find_best_worst
+Identify optimal and poorest performing runs:
+- **metric**: Choose maximum, mean, or median latency
+- **count**: Number of best/worst results to return (default: 5)
+
+Shows ranked results with kernel version, date, and latency metrics.
+
+### compare_to_baseline
+Regression detection against a baseline result:
+- **baseline_file**: Reference rteval XML file
+- **directory**: Directory containing results to compare
+- **threshold_percent**: Alert threshold for regressions (default: 10%)
+
+Reports:
+- Regressions (results exceeding threshold)
+- Passes (results within threshold)
+- Detailed percentage changes for all metrics
+
+### batch_analysis
+Aggregate statistics across multiple runs:
+- Total files analyzed
+- Date range coverage
+- Min/max/average latencies across all runs
+- Individual result summaries
+
+Useful for understanding performance trends over time.
 
 ## Development
 

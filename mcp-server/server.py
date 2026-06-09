@@ -297,6 +297,91 @@ async def list_tools() -> list[Tool]:
                 "required": [],
             },
         ),
+        Tool(
+            name="filter_results",
+            description="Filter rteval results by kernel version, date range, and test parameters",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "directory": {
+                        "type": "string",
+                        "description": "Directory to search (default: current directory)",
+                    },
+                    "kernel_pattern": {
+                        "type": "string",
+                        "description": "Filter by kernel version pattern (e.g., '6.17', 'rt', '7.0')",
+                    },
+                    "is_rt": {
+                        "type": "boolean",
+                        "description": "Filter by RT kernel (true/false)",
+                    },
+                    "date_from": {
+                        "type": "string",
+                        "description": "Start date (YYYY-MM-DD)",
+                    },
+                    "date_to": {
+                        "type": "string",
+                        "description": "End date (YYYY-MM-DD)",
+                    },
+                    "min_duration_minutes": {
+                        "type": "integer",
+                        "description": "Minimum test duration in minutes",
+                    },
+                    "max_latency_threshold": {
+                        "type": "number",
+                        "description": "Filter results with max latency below this threshold (µs)",
+                    },
+                },
+                "required": [],
+            },
+        ),
+        Tool(
+            name="find_best_worst",
+            description="Find best and worst rteval runs based on latency metrics",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "directory": {
+                        "type": "string",
+                        "description": "Directory to search (default: current directory)",
+                    },
+                    "metric": {
+                        "type": "string",
+                        "description": "Metric to evaluate: 'maximum', 'mean', or 'median' (default: maximum)",
+                        "default": "maximum",
+                    },
+                    "count": {
+                        "type": "integer",
+                        "description": "Number of best/worst results to return (default: 5)",
+                        "default": 5,
+                    },
+                },
+                "required": [],
+            },
+        ),
+        Tool(
+            name="compare_to_baseline",
+            description="Compare multiple rteval results against a baseline result",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "baseline_file": {
+                        "type": "string",
+                        "description": "Path to baseline rteval XML file",
+                    },
+                    "directory": {
+                        "type": "string",
+                        "description": "Directory containing results to compare (default: current directory)",
+                    },
+                    "threshold_percent": {
+                        "type": "number",
+                        "description": "Alert if results exceed baseline by this percentage (default: 10)",
+                        "default": 10,
+                    },
+                },
+                "required": ["baseline_file"],
+            },
+        ),
     ]
 
 
@@ -887,6 +972,371 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
             return [TextContent(
                 type="text",
                 text=f"Error in batch analysis: {str(e)}"
+            )]
+
+    elif name == "filter_results":
+        directory = arguments.get("directory", ".")
+        kernel_pattern = arguments.get("kernel_pattern")
+        is_rt = arguments.get("is_rt")
+        date_from = arguments.get("date_from")
+        date_to = arguments.get("date_to")
+        min_duration = arguments.get("min_duration_minutes")
+        max_threshold = arguments.get("max_latency_threshold")
+
+        try:
+            path = Path(directory)
+            if not path.exists():
+                return [TextContent(
+                    type="text",
+                    text=f"Error: Directory '{directory}' does not exist"
+                )]
+
+            # Find all XML files
+            files = list(path.glob("*.xml"))
+            if not files:
+                return [TextContent(
+                    type="text",
+                    text=f"No XML files found in '{directory}'"
+                )]
+
+            # Parse and filter
+            filtered = []
+            for file_path in files:
+                try:
+                    data = extract_rteval_data(str(file_path))
+
+                    # Apply filters
+                    if kernel_pattern and kernel_pattern.lower() not in data["system_info"].get("kernel", "").lower():
+                        continue
+
+                    if is_rt is not None and data["system_info"].get("is_RT") != is_rt:
+                        continue
+
+                    # Date filtering
+                    if date_from or date_to:
+                        run_date = data["run_info"].get("date")
+                        if run_date:
+                            if date_from and run_date < date_from:
+                                continue
+                            if date_to and run_date > date_to:
+                                continue
+
+                    # Duration filtering
+                    if min_duration:
+                        ri = data["run_info"]
+                        total_minutes = (ri.get("days", 0) * 24 * 60 +
+                                       ri.get("hours", 0) * 60 +
+                                       ri.get("minutes", 0))
+                        if total_minutes < min_duration:
+                            continue
+
+                    # Max latency threshold
+                    if max_threshold:
+                        max_lat = None
+                        for mtype in ["timerlat", "cyclictest"]:
+                            if mtype in data["measurements"]:
+                                max_val = data["measurements"][mtype].get("maximum", {}).get("value")
+                                if max_val:
+                                    try:
+                                        max_lat = float(max_val)
+                                        break
+                                    except ValueError:
+                                        pass
+
+                        if max_lat is None or max_lat > max_threshold:
+                            continue
+
+                    filtered.append(data)
+
+                except Exception:
+                    continue
+
+            if not filtered:
+                return [TextContent(
+                    type="text",
+                    text="No results matched the filter criteria"
+                )]
+
+            # Build output
+            result = f"Filtered Results ({len(filtered)} of {len(files)} files matched):\n"
+            result += "=" * 60 + "\n\n"
+
+            for data in filtered:
+                result += f"{Path(data['file']).name}:\n"
+                if "date" in data["run_info"]:
+                    result += f"  Date: {data['run_info']['date']}\n"
+                if "kernel" in data["system_info"]:
+                    result += f"  Kernel: {data['system_info']['kernel']}"
+                    if "is_RT" in data["system_info"]:
+                        result += f" (RT: {'Yes' if data['system_info']['is_RT'] else 'No'})"
+                    result += "\n"
+
+                # Show key metrics
+                for mtype in ["timerlat", "cyclictest"]:
+                    if mtype in data["measurements"]:
+                        meas = data["measurements"][mtype]
+                        if "maximum" in meas:
+                            result += f"  Max latency: {meas['maximum']['value']} {meas['maximum']['unit']}\n"
+                        if "mean" in meas:
+                            result += f"  Mean latency: {meas['mean']['value']} {meas['mean']['unit']}\n"
+                        break
+
+                result += "\n"
+
+            return [TextContent(type="text", text=result)]
+
+        except Exception as e:
+            return [TextContent(
+                type="text",
+                text=f"Error filtering results: {str(e)}"
+            )]
+
+    elif name == "find_best_worst":
+        directory = arguments.get("directory", ".")
+        metric = arguments.get("metric", "maximum")
+        count = arguments.get("count", 5)
+
+        try:
+            path = Path(directory)
+            if not path.exists():
+                return [TextContent(
+                    type="text",
+                    text=f"Error: Directory '{directory}' does not exist"
+                )]
+
+            # Find all XML files
+            files = list(path.glob("*.xml"))
+            if not files:
+                return [TextContent(
+                    type="text",
+                    text=f"No XML files found in '{directory}'"
+                )]
+
+            # Parse and collect metrics
+            results_with_metrics = []
+            for file_path in files:
+                try:
+                    data = extract_rteval_data(str(file_path))
+
+                    # Extract the requested metric
+                    metric_value = None
+                    for mtype in ["timerlat", "cyclictest"]:
+                        if mtype in data["measurements"]:
+                            metric_data = data["measurements"][mtype].get(metric)
+                            if metric_data:
+                                try:
+                                    metric_value = float(metric_data["value"])
+                                    break
+                                except ValueError:
+                                    pass
+
+                    if metric_value is not None:
+                        results_with_metrics.append((data, metric_value))
+
+                except Exception:
+                    continue
+
+            if not results_with_metrics:
+                return [TextContent(
+                    type="text",
+                    text=f"No results found with {metric} metric"
+                )]
+
+            # Sort by metric value
+            results_with_metrics.sort(key=lambda x: x[1])
+
+            # Build output
+            result = f"Best and Worst Results (by {metric} latency):\n"
+            result += "=" * 60 + "\n\n"
+
+            # Best results (lowest latency)
+            result += f"BEST {min(count, len(results_with_metrics))} Results (lowest {metric}):\n"
+            result += "-" * 60 + "\n"
+            for i, (data, metric_val) in enumerate(results_with_metrics[:count], 1):
+                result += f"\n{i}. {Path(data['file']).name}\n"
+                result += f"   {metric.capitalize()}: {metric_val:.2f} µs\n"
+                if "kernel" in data["system_info"]:
+                    result += f"   Kernel: {data['system_info']['kernel']}\n"
+                if "date" in data["run_info"]:
+                    result += f"   Date: {data['run_info']['date']}\n"
+
+            # Worst results (highest latency)
+            result += f"\nWORST {min(count, len(results_with_metrics))} Results (highest {metric}):\n"
+            result += "-" * 60 + "\n"
+            for i, (data, metric_val) in enumerate(reversed(results_with_metrics[-count:]), 1):
+                result += f"\n{i}. {Path(data['file']).name}\n"
+                result += f"   {metric.capitalize()}: {metric_val:.2f} µs\n"
+                if "kernel" in data["system_info"]:
+                    result += f"   Kernel: {data['system_info']['kernel']}\n"
+                if "date" in data["run_info"]:
+                    result += f"   Date: {data['run_info']['date']}\n"
+
+            return [TextContent(type="text", text=result)]
+
+        except Exception as e:
+            return [TextContent(
+                type="text",
+                text=f"Error finding best/worst results: {str(e)}"
+            )]
+
+    elif name == "compare_to_baseline":
+        baseline_file = arguments["baseline_file"]
+        directory = arguments.get("directory", ".")
+        threshold_percent = arguments.get("threshold_percent", 10)
+
+        try:
+            # Load baseline
+            if not Path(baseline_file).exists():
+                return [TextContent(
+                    type="text",
+                    text=f"Error: Baseline file '{baseline_file}' does not exist"
+                )]
+
+            baseline_data = extract_rteval_data(baseline_file)
+
+            # Get baseline metrics
+            baseline_metrics = {}
+            for mtype in ["timerlat", "cyclictest"]:
+                if mtype in baseline_data["measurements"]:
+                    for metric in ["maximum", "mean", "median"]:
+                        if metric in baseline_data["measurements"][mtype]:
+                            try:
+                                baseline_metrics[metric] = float(
+                                    baseline_data["measurements"][mtype][metric]["value"]
+                                )
+                            except ValueError:
+                                pass
+                    break
+
+            if not baseline_metrics:
+                return [TextContent(
+                    type="text",
+                    text="Could not extract metrics from baseline file"
+                )]
+
+            # Find files to compare
+            path = Path(directory)
+            if not path.exists():
+                return [TextContent(
+                    type="text",
+                    text=f"Error: Directory '{directory}' does not exist"
+                )]
+
+            files = list(path.glob("*.xml"))
+            if not files:
+                return [TextContent(
+                    type="text",
+                    text=f"No XML files found in '{directory}'"
+                )]
+
+            # Build comparison report
+            result = f"Baseline Comparison Report\n"
+            result += "=" * 60 + "\n\n"
+            result += f"Baseline: {Path(baseline_file).name}\n"
+            result += f"Baseline Metrics:\n"
+            for metric, value in baseline_metrics.items():
+                result += f"  {metric}: {value:.2f} µs\n"
+            result += f"\nThreshold: {threshold_percent}% above baseline\n"
+            result += "=" * 60 + "\n\n"
+
+            regressions = []
+            passes = []
+
+            for file_path in files:
+                # Skip baseline file itself
+                if str(file_path) == str(Path(baseline_file).resolve()):
+                    continue
+
+                try:
+                    data = extract_rteval_data(str(file_path))
+
+                    # Extract metrics
+                    test_metrics = {}
+                    for mtype in ["timerlat", "cyclictest"]:
+                        if mtype in data["measurements"]:
+                            for metric in ["maximum", "mean", "median"]:
+                                if metric in data["measurements"][mtype]:
+                                    try:
+                                        test_metrics[metric] = float(
+                                            data["measurements"][mtype][metric]["value"]
+                                        )
+                                    except ValueError:
+                                        pass
+                            break
+
+                    if not test_metrics:
+                        continue
+
+                    # Check for regressions
+                    has_regression = False
+                    comparison = {
+                        "file": Path(file_path).name,
+                        "kernel": data["system_info"].get("kernel", "unknown"),
+                        "date": data["run_info"].get("date", "unknown"),
+                        "metrics": {}
+                    }
+
+                    for metric in baseline_metrics:
+                        if metric in test_metrics:
+                            baseline_val = baseline_metrics[metric]
+                            test_val = test_metrics[metric]
+                            diff = test_val - baseline_val
+                            pct_change = (diff / baseline_val) * 100 if baseline_val != 0 else 0
+
+                            comparison["metrics"][metric] = {
+                                "baseline": baseline_val,
+                                "test": test_val,
+                                "diff": diff,
+                                "pct_change": pct_change
+                            }
+
+                            if pct_change > threshold_percent:
+                                has_regression = True
+
+                    if has_regression:
+                        regressions.append(comparison)
+                    else:
+                        passes.append(comparison)
+
+                except Exception:
+                    continue
+
+            # Report regressions
+            if regressions:
+                result += f"REGRESSIONS DETECTED ({len(regressions)} files):\n"
+                result += "-" * 60 + "\n\n"
+                for comp in regressions:
+                    result += f"{comp['file']}:\n"
+                    result += f"  Kernel: {comp['kernel']}\n"
+                    result += f"  Date: {comp['date']}\n"
+                    for metric, values in comp["metrics"].items():
+                        result += f"  {metric}:\n"
+                        result += f"    Baseline: {values['baseline']:.2f} µs\n"
+                        result += f"    Test: {values['test']:.2f} µs\n"
+                        result += f"    Change: {values['pct_change']:+.2f}%"
+                        if values['pct_change'] > threshold_percent:
+                            result += " ⚠️  REGRESSION"
+                        result += "\n"
+                    result += "\n"
+
+            # Report passes
+            if passes:
+                result += f"\nPASSED COMPARISON ({len(passes)} files):\n"
+                result += "-" * 60 + "\n\n"
+                for comp in passes:
+                    result += f"{comp['file']}: "
+                    max_pct = max(m['pct_change'] for m in comp['metrics'].values())
+                    result += f"Max change: {max_pct:+.2f}% ✓\n"
+
+            if not regressions and not passes:
+                result += "No comparable results found\n"
+
+            return [TextContent(type="text", text=result)]
+
+        except Exception as e:
+            return [TextContent(
+                type="text",
+                text=f"Error comparing to baseline: {str(e)}"
             )]
 
     else:
