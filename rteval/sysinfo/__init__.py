@@ -16,10 +16,11 @@ from rteval.sysinfo.osinfo import OSInfo
 from rteval.sysinfo.newnet import NetworkInfo
 from rteval.sysinfo.cmdline import cmdlineInfo
 from rteval.sysinfo.tuned import TunedInfo
+from rteval.sysinfo.containercheck import ContainerInfo
 from rteval.sysinfo import dmi
 
 class SystemInfo(KernelInfo, SystemServices, dmi.DMIinfo, CPUtopology,
-                 MemoryInfo, OSInfo, NetworkInfo, cmdlineInfo, TunedInfo):
+                 MemoryInfo, OSInfo, NetworkInfo, cmdlineInfo, TunedInfo, ContainerInfo):
     def __init__(self, config, logger=None):
         self.__logger = logger
         KernelInfo.__init__(self, logger=logger)
@@ -30,6 +31,7 @@ class SystemInfo(KernelInfo, SystemServices, dmi.DMIinfo, CPUtopology,
         cmdlineInfo.__init__(self, logger=logger)
         NetworkInfo.__init__(self, logger=logger)
         TunedInfo.__init__(self, logger=logger)
+        ContainerInfo.__init__(self, logger=logger)
 
         # Parse initial DMI decoding errors
         self.ProcessWarnings()
@@ -55,6 +57,7 @@ class SystemInfo(KernelInfo, SystemServices, dmi.DMIinfo, CPUtopology,
         report_n.addChild(dmi.DMIinfo.MakeReport(self))
         report_n.addChild(cmdlineInfo.MakeReport(self))
         report_n.addChild(TunedInfo.MakeReport(self))
+        report_n.addChild(ContainerInfo.MakeReport(self))
 
         return report_n
 

@@ -122,6 +122,10 @@
     <xsl:value-of select="SystemInfo/uname/baseos|uname/baseos"/>
     <xsl:text>&#10;</xsl:text>
 
+    <xsl:if test="SystemInfo/ContainerInfo/container = 'true'">
+      <xsl:text>   Container:    Running in a container&#10;</xsl:text>
+    </xsl:if>
+
     <xsl:text>   Architecture: </xsl:text>
     <xsl:value-of select="SystemInfo/uname/arch|uname/arch"/>
     <xsl:text>&#10;</xsl:text>

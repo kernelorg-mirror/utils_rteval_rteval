@@ -8,6 +8,8 @@
 import os
 import re
 import subprocess
+import libxml2
+from rteval.Log import Log
 
 
 def is_container():
@@ -52,6 +54,28 @@ def is_container():
         pass
 
     return False
+
+
+class ContainerInfo:
+    """Class for collecting container information for XML report"""
+    def __init__(self, logger=None):
+        self.__logger = logger
+
+    def __log(self, logtype, msg):
+        if self.__logger:
+            self.__logger.log(logtype, msg)
+
+    def MakeReport(self):
+        """Generate XML report node for container status"""
+        rep_n = libxml2.newNode("ContainerInfo")
+        container_n = libxml2.newNode("container")
+
+        in_container = is_container()
+        container_n.addContent("true" if in_container else "false")
+        self.__log(Log.DEBUG, f"Container detection: {in_container}")
+        rep_n.addChild(container_n)
+
+        return rep_n
 
 
 def unit_test(rootdir):

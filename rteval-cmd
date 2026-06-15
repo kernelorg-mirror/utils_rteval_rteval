@@ -34,6 +34,7 @@ from rteval.version import RTEVAL_VERSION
 from rteval.systopology import SysTopology, parse_cpulist_from_config, validate_housekeeping_cpus, validate_core_sharing
 from rteval.modules.loads.kcompile import ModuleParameters
 from rteval.cpulist_utils import CpuList, is_relative, collapse_cpulist
+from rteval.sysinfo import containercheck
 
 def summarize(repfile, xslt):
     """ Summarize an already existing XML report """
@@ -338,6 +339,10 @@ if __name__ == '__main__':
         elif selected_measurement_module == 'cyclictest':
             if hasattr(msrcfg, 'timerlat'):
                 msrcfg.timerlat = None
+
+        # Check if running in a container and warn the user
+        if containercheck.is_container():
+            logger.log(Log.WARN, "rteval is running in a container")
 
         if rtevcfg.noload:
             if rtevcfg.onlyload:
