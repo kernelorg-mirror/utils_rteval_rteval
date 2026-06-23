@@ -191,8 +191,8 @@ def collapse_cpulist(cpulist):
     if not cpulist:
         return ""
 
-    # Ensure we're working with integers and sort them
-    sorted_cpus = sorted([int(cpu) for cpu in cpulist])
+    # Ensure we're working with integers, remove duplicates, and sort them
+    sorted_cpus = sorted(set([int(cpu) for cpu in cpulist]))
 
     cur_range = [None, None]
     result = []
