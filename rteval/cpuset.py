@@ -6,6 +6,16 @@ import errno
 import os
 from glob import glob
 
+# Blocklist of critical processes that should never be moved to custom cpusets
+# Moving these processes can break system functionality and prevent clean shutdown
+PROCESS_BLOCKLIST = {
+    'systemd',           # PID 1 - init system
+    'systemd-logind',    # Session/power management - critical for shutdown
+    'systemd-journald',  # Logging daemon
+    'dbus-daemon',       # D-Bus system message bus
+    'dbus-broker',       # Alternative D-Bus implementation
+}
+
 
 class Cpuset:
     """ Class for manipulating cpusets """
@@ -68,12 +78,43 @@ class Cpuset:
         with open(path, 'w', encoding='utf-8') as f:
             f.write(cpu_str)
 
+    @staticmethod
+    def _get_process_name(pid):
+        """
+        Get the process name (comm) for a given PID
+        Returns None if the process doesn't exist or can't be read
+        """
+        try:
+            with open(f'/proc/{pid}/comm', 'r', encoding='utf-8') as f:
+                return f.read().strip()
+        except (OSError, FileNotFoundError):
+            return None
+
+    @staticmethod
+    def _is_process_blocklisted(pid):
+        """
+        Check if a process is on the blocklist of critical system processes
+        Returns True if the process should not be moved to a custom cpuset
+        """
+        comm = Cpuset._get_process_name(pid)
+        if comm is None:
+            return False
+        return comm in PROCESS_BLOCKLIST
+
     def write_pid(self, pid):
         """
         Place a pid in a cpuset
         Returns True if successful, False if the process cannot be moved
         Raises OSError for unexpected errors
+
+        Note: Critical system processes (systemd, systemd-logind, etc.) are
+        automatically skipped to prevent system instability and shutdown issues.
         """
+        # Check if process is on the blocklist
+        if self._is_process_blocklisted(pid):
+            # Silently skip blocklisted processes - caller will count as failed
+            return False
+
         path = os.path.join(self._cpuset_path, "cgroup.procs")
         pid_str = str(pid)
         try:

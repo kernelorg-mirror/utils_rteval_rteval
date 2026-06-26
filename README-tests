@@ -5,6 +5,12 @@ There currently exist four kinds of tests for rteval:
 Unit tests reside in the tests/ directory. They are Python modules which import
 the Python unittest library.
 
+Notable unit tests:
+- test_process_blocklist.py - Tests for process blocklist protection (8 tests:
+  6 non-root, 2 root-required). Verifies that critical system processes like
+  systemd and systemd-logind cannot be moved to custom cpusets, preventing
+  system instability and shutdown issues.
+
 The Makefile target "unittest" (or, alternatively, just "test") invokes unit
 tests:
 
