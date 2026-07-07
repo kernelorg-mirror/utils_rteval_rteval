@@ -41,10 +41,11 @@ def sig_handler(signum, frame):
     else:
         raise RuntimeError(f"SIGNAL received! ({signum})")
 
+orig_excepthook = threading.excepthook
 def except_hook(args):
     global threaderr
 
-    threading.__excepthook__(args)
+    orig_excepthook(args)
     threaderr = True
     stopsig.set()
 
