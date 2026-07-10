@@ -125,7 +125,7 @@ class CpusetManager:
         self.measurement_cpuset = Cpuset('rteval_measurement')
         self.measurement_cpuset.write_memnode(self.numa_nodes)
         self.measurement_cpuset.assign_cpus(collapse_cpulist(self.measurement_cpus))
-        self.measurement_cpuset.write_cpu_exclusive(False)  # partition=member
+        self.measurement_cpuset.write_cpu_exclusive(True)  # partition=isolated
 
         self.logger.log(Log.INFO, "Cpusets created successfully")
         return self
