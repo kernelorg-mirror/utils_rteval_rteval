@@ -122,7 +122,10 @@ def parse_options(cfg, parser, cmdargs):
                       help="use cgroup v2 cpusets to isolate measurement and housekeeping workloads")
     parser.add_argument("--housekeeping", dest="rteval___housekeeping",
                       type=str, default="", metavar="CPULIST",
-                      help="isolated CPUs reserved for system tasks (not used by rteval)")
+                      help="CPUs reserved for system tasks (not used by measurement or loads)")
+    parser.add_argument("--housekeeping-isolated", dest="rteval___housekeeping_isolated",
+                      action="store_true", default=False,
+                      help="make housekeeping cpuset use partition=isolated instead of member (requires --cpusets and --housekeeping)")
     parser.add_argument("--warn-non-isolated-core-sharing", dest="rteval___warn_non_isolated_core_sharing",
                       action="store_true", default=False,
                       help="warn about measurement and load CPUs sharing cores even when neither is isolated")
@@ -410,6 +413,13 @@ if __name__ == '__main__':
         ldcfg = config.GetSection('loads')
         msrcfg = config.GetSection('measurement')
 
+        # Validate --housekeeping-isolated usage
+        if rtevcfg.housekeeping_isolated:
+            if not rtevcfg.cpusets:
+                raise RuntimeError("--housekeeping-isolated requires --cpusets")
+            if not rtevcfg.housekeeping:
+                raise RuntimeError("--housekeeping-isolated requires --housekeeping")
+
         # Validate and process housekeeping CPUs
         housekeeping_cpus = []
         if rtevcfg.housekeeping:
@@ -560,7 +570,8 @@ if __name__ == '__main__':
             cpuset_manager = CpusetManager(
                 housekeeping_cpus=housekeeping_cpus,
                 measurement_cpus=msrcfg_cpus,
-                logger=logger
+                logger=logger,
+                housekeeping_isolated=rtevcfg.housekeeping_isolated
             )
 
         # Pass cpuset_manager to RtEval (None if not using cpusets)

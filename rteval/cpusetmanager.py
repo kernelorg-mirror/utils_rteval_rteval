@@ -71,7 +71,7 @@ class CpusetManager:
             except Exception as e:
                 logger.log(Log.WARN, f"Failed to clean up {cpuset_name}: {e}")
 
-    def __init__(self, housekeeping_cpus, measurement_cpus, logger):
+    def __init__(self, housekeeping_cpus, measurement_cpus, logger, housekeeping_isolated=False):
         """
         Initialize cpuset manager
 
@@ -79,6 +79,7 @@ class CpusetManager:
             housekeeping_cpus: List of CPU integers for housekeeping (may be empty)
             measurement_cpus: List of CPU integers for measurement workloads
             logger: rteval Log instance for logging
+            housekeeping_isolated: If True, use partition=isolated for housekeeping (default: False = partition=member)
 
         Note: Load workloads use taskset for CPU affinity and don't need cpusets.
         """
@@ -91,6 +92,7 @@ class CpusetManager:
         self.housekeeping_cpus = housekeeping_cpus
         self.measurement_cpus = measurement_cpus
         self.logger = logger
+        self.housekeeping_isolated = housekeeping_isolated
 
         # Cpuset objects (will be created in __enter__)
         self.housekeeping_cpuset = None
@@ -114,11 +116,12 @@ class CpusetManager:
 
         # Create housekeeping cpuset if requested
         if self.housekeeping_cpus:
-            self.logger.log(Log.DEBUG, f"Creating rteval_housekeeping cpuset with CPUs {collapse_cpulist(self.housekeeping_cpus)}")
+            partition_type = "isolated" if self.housekeeping_isolated else "member"
+            self.logger.log(Log.DEBUG, f"Creating rteval_housekeeping cpuset with CPUs {collapse_cpulist(self.housekeeping_cpus)} (partition={partition_type})")
             self.housekeeping_cpuset = Cpuset('rteval_housekeeping')
             self.housekeeping_cpuset.write_memnode(self.numa_nodes)
             self.housekeeping_cpuset.assign_cpus(collapse_cpulist(self.housekeeping_cpus))
-            self.housekeeping_cpuset.write_cpu_exclusive(False)  # partition=member
+            self.housekeeping_cpuset.write_cpu_exclusive(self.housekeeping_isolated)  # partition=isolated if True, member if False
 
         # Create measurement cpuset
         self.logger.log(Log.DEBUG, f"Creating rteval_measurement cpuset with CPUs {collapse_cpulist(self.measurement_cpus)}")

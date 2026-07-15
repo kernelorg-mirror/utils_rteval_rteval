@@ -62,6 +62,11 @@ if [ -d "tests" ]; then
         run_test "tests/test_core_sharing_validation.py"
     fi
 
+    # Run test_cpusetmanager.py (non-root tests only)
+    if [ -f "tests/test_cpusetmanager.py" ]; then
+        run_test "tests/test_cpusetmanager.py"
+    fi
+
     # Add more tests here as they are created
     # Example:
     # if [ -f "tests/test_another_feature.py" ]; then

@@ -62,6 +62,17 @@ unit-tests:
 
 tests: unit-tests
 
+test-all:
+	@echo "Running ALL tests (including root-required tests)..."
+	@echo ""
+	@if [ "$$(id -u)" != "0" ]; then \
+		echo "ERROR: test-all must be run as root"; \
+		echo "Usage: sudo make test-all"; \
+		exit 1; \
+	fi
+	@echo "Running unit tests (including root-required)..."
+	$(PYTHON) -m unittest discover -s tests -p "test_*.py" -v
+
 clean:
 	rm -f *~ rteval/*~ rteval/*.py[co] *.tar.bz2 *.tar.gz doc/*~
 	rm -rf rteval-[0-9]*-[0-9]*
@@ -124,6 +135,7 @@ help:
 	@echo "        runit:            do a short testrun locally [default]"
 	@echo "        tests:            run unit tests (alias for unit-tests)"
 	@echo "        unit-tests:       run unit tests"
+	@echo "        test-all:         run ALL tests including root-required tests (requires root)"
 	@echo "        e2e-tests:        run end-to-end tests"
 	@echo "        regression-tests: run regression tests for measurement modules (requires root)"
 	@echo "        cpuset-tests:     run cpuset integration tests (requires root)"
@@ -145,4 +157,4 @@ tags:
 cleantags:
 	rm -f tags
 
-.PHONY: tests unit-tests e2e-tests regression-tests cpuset-tests uninstall
+.PHONY: tests unit-tests test-all e2e-tests regression-tests cpuset-tests uninstall
