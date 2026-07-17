@@ -185,10 +185,28 @@ async def main():
         print(f"✗ Failed: {e}")
         sys.exit(1)
 
+    # Test 9: Get per-CPU stats
+    print("\n9. Testing get_per_cpu_stats...")
+    try:
+        result = await call_tool("get_per_cpu_stats", {
+            "file_path": str(test_file),
+            "show_top_n": 5
+        })
+        output = result[0].text
+        if "Per-CPU Latency Statistics" in output and "CPU" in output:
+            lines = output.split('\n')[:12]
+            print("✓ " + '\n  '.join(lines))
+        else:
+            print(f"✗ Unexpected output: {output[:200]}")
+            sys.exit(1)
+    except Exception as e:
+        print(f"✗ Failed: {e}")
+        sys.exit(1)
+
     print("\n" + "=" * 60)
     print("✓ All MCP server integration tests passed!")
     print(f"\nTested with: {test_dir.name}")
-    print(f"Total tools tested: 8")
+    print(f"Total tools tested: 9")
 
 
 if __name__ == "__main__":

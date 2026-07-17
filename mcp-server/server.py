@@ -292,6 +292,55 @@ def calculate_percentiles(buckets: list[dict], percentiles: list[float]) -> dict
     return result
 
 
+def extract_per_cpu_stats(file_path: str) -> list[dict[str, Any]]:
+    """Extract per-CPU statistics from an rteval XML file.
+
+    Returns a list of dictionaries, each containing statistics for one CPU.
+    """
+    tree = ET.parse(file_path)
+    root = tree.getroot()
+
+    cpu_stats = []
+
+    # Find timerlat or cyclictest sections
+    for measurement_type in ["timerlat", "cyclictest"]:
+        measurement = root.find(f".//{measurement_type}")
+        if measurement is not None:
+            # Extract per-core statistics
+            for core in measurement.findall("core"):
+                core_id = core.get("id")
+                priority = core.get("priority")
+
+                stats = core.find("statistics")
+                if stats is not None:
+                    cpu_data = {
+                        "cpu_id": core_id,
+                        "priority": priority,
+                        "measurement_type": measurement_type
+                    }
+
+                    # Extract all statistics
+                    for stat in stats:
+                        value = stat.text
+                        unit = stat.get("unit", "")
+
+                        # Try to convert to float for numeric stats
+                        try:
+                            cpu_data[stat.tag] = float(value)
+                            if unit:
+                                cpu_data[f"{stat.tag}_unit"] = unit
+                        except (ValueError, TypeError):
+                            cpu_data[stat.tag] = value
+                            if unit:
+                                cpu_data[f"{stat.tag}_unit"] = unit
+
+                    cpu_stats.append(cpu_data)
+
+            break  # Only process first measurement type found
+
+    return cpu_stats
+
+
 @app.list_tools()
 async def list_tools() -> list[Tool]:
     """List available tools for rteval analysis."""
@@ -535,6 +584,34 @@ async def list_tools() -> list[Tool]:
                         "type": "boolean",
                         "description": "Calculate percentiles per CPU (default: false)",
                         "default": False,
+                    },
+                },
+                "required": ["file_path"],
+            },
+        ),
+        Tool(
+            name="get_per_cpu_stats",
+            description="Get per-CPU latency statistics and identify problematic cores",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "Path to the rteval XML result file",
+                    },
+                    "sort_by": {
+                        "type": "string",
+                        "description": "Metric to sort by: 'maximum', 'mean', 'median', 'standard_deviation' (default: maximum)",
+                        "default": "maximum",
+                    },
+                    "show_top_n": {
+                        "type": "integer",
+                        "description": "Show only top N worst CPUs (0 = show all, default: 0)",
+                        "default": 0,
+                    },
+                    "highlight_threshold": {
+                        "type": "number",
+                        "description": "Highlight CPUs with max latency above this threshold in µs (optional)",
                     },
                 },
                 "required": ["file_path"],
@@ -1612,6 +1689,98 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
             return [TextContent(
                 type="text",
                 text=f"Error calculating percentiles: {str(e)}"
+            )]
+
+    elif name == "get_per_cpu_stats":
+        file_path = arguments["file_path"]
+        sort_by = arguments.get("sort_by", "maximum")
+        show_top_n = arguments.get("show_top_n", 0)
+        highlight_threshold = arguments.get("highlight_threshold")
+
+        try:
+            path = Path(file_path)
+            if not path.exists():
+                return [TextContent(
+                    type="text",
+                    text=f"Error: File '{file_path}' does not exist"
+                )]
+
+            # Extract per-CPU statistics
+            cpu_stats = extract_per_cpu_stats(file_path)
+
+            if not cpu_stats:
+                return [TextContent(
+                    type="text",
+                    text=f"No per-CPU statistics found in '{path.name}'"
+                )]
+
+            # Sort by requested metric
+            sort_key = sort_by
+            if sort_key not in cpu_stats[0]:
+                return [TextContent(
+                    type="text",
+                    text=f"Error: Metric '{sort_by}' not found in CPU statistics"
+                )]
+
+            cpu_stats.sort(key=lambda x: x.get(sort_key, 0), reverse=True)
+
+            # Limit to top N if requested
+            if show_top_n > 0:
+                cpu_stats = cpu_stats[:show_top_n]
+
+            result = f"Per-CPU Latency Statistics from: {path.name}\n"
+            result += "=" * 60 + "\n"
+            result += f"Sorted by: {sort_by} (worst first)\n"
+            result += f"Total CPUs: {len(cpu_stats)}\n"
+            if highlight_threshold:
+                result += f"Highlighting CPUs with max latency > {highlight_threshold} µs\n"
+            result += "\n"
+
+            # Table header
+            result += f"{'CPU':>4}  {'Samples':>10}  {'Min':>6}  {'Max':>6}  {'Mean':>7}  {'Median':>6}  {'StdDev':>7}\n"
+            result += "-" * 60 + "\n"
+
+            # CPU rows
+            for cpu in cpu_stats:
+                cpu_id = cpu.get("cpu_id", "?")
+                samples = int(cpu.get("samples", 0))
+                minimum = cpu.get("minimum", 0)
+                maximum = cpu.get("maximum", 0)
+                mean = cpu.get("mean", 0)
+                median = cpu.get("median", 0)
+                std_dev = cpu.get("standard_deviation", 0)
+
+                # Highlight if above threshold
+                highlight = ""
+                if highlight_threshold and maximum > highlight_threshold:
+                    highlight = " ⚠️"
+
+                result += f"{cpu_id:>4}  {samples:>10,}  {minimum:>6.1f}  {maximum:>6.1f}  {mean:>7.2f}  {median:>6.1f}  {std_dev:>7.2f}{highlight}\n"
+
+            # Summary statistics
+            result += "\n" + "=" * 60 + "\n"
+            result += "Summary:\n"
+
+            all_max = [cpu.get("maximum", 0) for cpu in cpu_stats]
+            all_mean = [cpu.get("mean", 0) for cpu in cpu_stats]
+            all_std = [cpu.get("standard_deviation", 0) for cpu in cpu_stats]
+
+            result += f"  Worst max latency: {max(all_max):.1f} µs (CPU {cpu_stats[0]['cpu_id']})\n"
+            result += f"  Best max latency: {min(all_max):.1f} µs\n"
+            result += f"  Average max latency: {sum(all_max) / len(all_max):.2f} µs\n"
+            result += f"  Average mean latency: {sum(all_mean) / len(all_mean):.2f} µs\n"
+            result += f"  Average std deviation: {sum(all_std) / len(all_std):.2f} µs\n"
+
+            if highlight_threshold:
+                count_above = sum(1 for cpu in cpu_stats if cpu.get("maximum", 0) > highlight_threshold)
+                result += f"\n  CPUs above threshold ({highlight_threshold} µs): {count_above}\n"
+
+            return [TextContent(type="text", text=result)]
+
+        except Exception as e:
+            return [TextContent(
+                type="text",
+                text=f"Error extracting per-CPU stats: {str(e)}"
             )]
 
     else:

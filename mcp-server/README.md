@@ -48,9 +48,10 @@ sudo dnf install python3-mcp python3-mcp+cli python3-lxml
 - **list_logs**: List available log files in an rteval result directory
 - **read_log**: Read log content with optional filtering (head/tail/grep)
 
-### Histogram Analysis
+### Histogram & Per-CPU Analysis
 - **extract_histogram**: Extract latency histogram data from rteval results
 - **get_percentiles**: Calculate latency percentiles (P50, P95, P99, P99.9, etc.)
+- **get_per_cpu_stats**: Get per-CPU latency statistics and identify problematic cores
 
 ## Usage
 
@@ -111,6 +112,15 @@ Extract histogram data from rteval-20260714-1/summary.xml
 Calculate P99 and P99.9 percentiles for rteval-20260714-1/summary.xml
 Show me percentiles for each CPU in rteval-20260714-1/summary.xml
 What percentage of samples had latency under 10 microseconds?
+```
+
+**Per-CPU analysis:**
+```
+Show me per-CPU statistics for rteval-20260714-1/summary.xml
+Which CPUs had the worst maximum latency?
+Show the top 5 CPUs sorted by mean latency
+Highlight CPUs with max latency above 1000 microseconds
+Which CPUs have the most variable latency?
 ```
 
 ### Using with MCP Inspector
@@ -185,6 +195,31 @@ Reports:
 - **Per-CPU percentiles** help identify hardware-specific issues or IRQ affinity problems
 
 Example: If P99.9 = 16µs but max = 1550µs, this tells you the system is excellent with only rare outliers, not a systematic problem.
+
+### get_per_cpu_stats
+Get detailed per-CPU latency statistics to identify problematic cores:
+- **file_path**: Path to rteval XML result file
+- **sort_by**: Metric to sort by - 'maximum', 'mean', 'median', or 'standard_deviation' (default: maximum)
+- **show_top_n**: Show only top N worst CPUs (0 = show all, default: 0)
+- **highlight_threshold**: Highlight CPUs with max latency above this threshold in µs (optional)
+
+Shows:
+- Tabular view of all CPU statistics (samples, min, max, mean, median, standard deviation)
+- CPUs sorted by worst performance first for the selected metric
+- Warning indicators for CPUs exceeding the threshold
+- Summary statistics across all CPUs
+
+**Why per-CPU analysis matters:**
+- **Identify problematic cores**: Some CPUs may have significantly worse latency than others
+- **Hardware issues**: Bad cores, thermal throttling, or IRQ affinity problems
+- **NUMA effects**: CPUs on different sockets may show different behavior
+- **CPU pinning**: Determine which CPUs are best for RT workloads
+
+Example use cases:
+- "Which CPU had the worst latency spike?" → Sort by maximum
+- "Which CPUs are most consistent?" → Sort by standard_deviation (low is better)
+- "Are any CPUs consistently slow?" → Sort by mean latency
+- "Show me only the 5 worst CPUs" → Use show_top_n=5
 
 ## Development
 
