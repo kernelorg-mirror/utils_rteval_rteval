@@ -3,16 +3,23 @@
 Test script for histogram extraction and percentile calculation.
 """
 
+import sys
+from pathlib import Path
+
+# Add parent directory to path to import server module
+sys.path.insert(0, str(Path(__file__).parent.parent))
 from server import extract_histogram_data, calculate_percentiles
 
-# Test with the sample file
-test_file = "../rteval-20260714-1/summary.xml"
+# Find test file relative to script location
+# From tests/ -> mcp-server/ -> rteval/
+script_dir = Path(__file__).parent
+test_file = script_dir.parent.parent / "rteval-20260714-1" / "summary.xml"
 
 print("Testing histogram extraction...")
 print("=" * 60)
 
 # Extract histogram data
-histogram_data = extract_histogram_data(test_file)
+histogram_data = extract_histogram_data(str(test_file))
 
 # Check system histogram
 if histogram_data["system_histogram"]:
