@@ -48,6 +48,10 @@ sudo dnf install python3-mcp python3-mcp+cli python3-lxml
 - **list_logs**: List available log files in an rteval result directory
 - **read_log**: Read log content with optional filtering (head/tail/grep)
 
+### Histogram Analysis
+- **extract_histogram**: Extract latency histogram data from rteval results
+- **get_percentiles**: Calculate latency percentiles (P50, P95, P99, P99.9, etc.)
+
 ## Usage
 
 ### Testing the Server Directly
@@ -101,6 +105,14 @@ Analyze all rteval results and show aggregate statistics
 What's the average max latency across all runs?
 ```
 
+**Histogram and percentiles:**
+```
+Extract histogram data from rteval-20260714-1/summary.xml
+Calculate P99 and P99.9 percentiles for rteval-20260714-1/summary.xml
+Show me percentiles for each CPU in rteval-20260714-1/summary.xml
+What percentage of samples had latency under 10 microseconds?
+```
+
 ### Using with MCP Inspector
 
 ```bash
@@ -145,6 +157,34 @@ Aggregate statistics across multiple runs:
 - Individual result summaries
 
 Useful for understanding performance trends over time.
+
+### extract_histogram
+Extract raw histogram data from rteval results:
+- **file_path**: Path to rteval XML result file
+- **include_per_cpu**: Include per-CPU histogram data (default: true)
+
+Shows:
+- System-wide histogram summary with total samples and latency range
+- Top latency values by sample count with percentages
+- Per-CPU histogram summaries with individual max latencies
+
+### get_percentiles
+Calculate latency percentiles for detailed distribution analysis:
+- **file_path**: Path to rteval XML result file
+- **percentiles**: List of percentiles to calculate (default: [50, 90, 95, 99, 99.9, 99.99])
+- **per_cpu**: Calculate percentiles per CPU (default: false)
+
+Reports:
+- System-wide percentiles showing latency distribution
+- Per-CPU percentiles when requested for fine-grained analysis
+
+**Why percentiles matter:**
+- **Max latency** alone can be misleading (one outlier vs. systematic issues)
+- **P99.9** tells you that 99.9% of samples were below this value
+- **Percentiles** reveal whether high latencies are rare spikes or regular occurrences
+- **Per-CPU percentiles** help identify hardware-specific issues or IRQ affinity problems
+
+Example: If P99.9 = 16µs but max = 1550µs, this tells you the system is excellent with only rare outliers, not a systematic problem.
 
 ## Development
 

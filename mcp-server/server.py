@@ -178,6 +178,120 @@ def extract_rteval_data(file_path: str) -> dict[str, Any]:
     return data
 
 
+def extract_histogram_data(file_path: str) -> dict[str, Any]:
+    """Extract histogram data from an rteval XML file.
+
+    Returns a dictionary with system-wide and per-CPU histogram data,
+    including bucket counts and percentile calculations.
+    """
+    tree = ET.parse(file_path)
+    root = tree.getroot()
+
+    result = {
+        "file": file_path,
+        "system_histogram": None,
+        "per_cpu_histograms": []
+    }
+
+    # Extract system-wide histogram
+    timerlat = root.find(".//timerlat")
+    if timerlat is not None:
+        # System-wide histogram is under <system> tag
+        system_elem = timerlat.find("system")
+        system_histogram = None
+        if system_elem is not None:
+            system_histogram = system_elem.find("histogram")
+
+        if system_histogram is not None:
+            nbuckets = int(system_histogram.get("nbuckets", "0"))
+            buckets = []
+
+            for bucket in system_histogram.findall("bucket"):
+                index = int(bucket.get("index"))
+                count = int(bucket.get("value"))
+                buckets.append({"latency_us": index, "count": count})
+
+            result["system_histogram"] = {
+                "nbuckets": nbuckets,
+                "buckets": buckets,
+                "total_samples": sum(b["count"] for b in buckets)
+            }
+
+        # Extract per-CPU histograms
+        for core in timerlat.findall("core"):
+            core_id = core.get("id")
+            priority = core.get("priority")
+            histogram = core.find("histogram")
+
+            if histogram is not None:
+                nbuckets = int(histogram.get("nbuckets", "0"))
+                buckets = []
+
+                for bucket in histogram.findall("bucket"):
+                    index = int(bucket.get("index"))
+                    count = int(bucket.get("value"))
+                    buckets.append({"latency_us": index, "count": count})
+
+                result["per_cpu_histograms"].append({
+                    "cpu_id": core_id,
+                    "priority": priority,
+                    "nbuckets": nbuckets,
+                    "buckets": buckets,
+                    "total_samples": sum(b["count"] for b in buckets)
+                })
+
+    return result
+
+
+def calculate_percentiles(buckets: list[dict], percentiles: list[float]) -> dict[str, float]:
+    """Calculate percentiles from histogram bucket data.
+
+    Args:
+        buckets: List of dicts with 'latency_us' and 'count' keys
+        percentiles: List of percentile values (e.g., [50, 95, 99, 99.9])
+
+    Returns:
+        Dictionary mapping percentile labels to latency values in microseconds
+    """
+    if not buckets:
+        return {}
+
+    # Calculate total samples
+    total_samples = sum(b["count"] for b in buckets)
+    if total_samples == 0:
+        return {}
+
+    # Sort buckets by latency
+    sorted_buckets = sorted(buckets, key=lambda b: b["latency_us"])
+
+    # Calculate cumulative counts
+    cumulative = []
+    running_count = 0
+    for bucket in sorted_buckets:
+        running_count += bucket["count"]
+        cumulative.append({
+            "latency_us": bucket["latency_us"],
+            "cumulative_count": running_count,
+            "cumulative_percent": (running_count / total_samples) * 100
+        })
+
+    # Find percentile values
+    result = {}
+    for p in percentiles:
+        target_count = (p / 100.0) * total_samples
+
+        # Find the first bucket where cumulative count >= target
+        for i, cum in enumerate(cumulative):
+            if cum["cumulative_count"] >= target_count:
+                result[f"P{p}"] = cum["latency_us"]
+                break
+        else:
+            # If no bucket found, use the maximum
+            result[f"P{p}"] = cumulative[-1]["latency_us"]
+
+    return result
+
+
 @app.list_tools()
 async def list_tools() -> list[Tool]:
     """List available tools for rteval analysis."""
@@ -380,6 +494,50 @@ async def list_tools() -> list[Tool]:
                     },
                 },
                 "required": ["baseline_file"],
+            },
+        ),
+        Tool(
+            name="extract_histogram",
+            description="Extract latency histogram data from an rteval result file",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "Path to the rteval XML result file",
+                    },
+                    "include_per_cpu": {
+                        "type": "boolean",
+                        "description": "Include per-CPU histogram data (default: true)",
+                        "default": True,
+                    },
+                },
+                "required": ["file_path"],
+            },
+        ),
+        Tool(
+            name="get_percentiles",
+            description="Calculate latency percentiles from an rteval result file",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "Path to the rteval XML result file",
+                    },
+                    "percentiles": {
+                        "type": "array",
+                        "description": "List of percentiles to calculate (default: [50, 90, 95, 99, 99.9, 99.99])",
+                        "items": {"type": "number"},
+                        "default": [50, 90, 95, 99, 99.9, 99.99],
+                    },
+                    "per_cpu": {
+                        "type": "boolean",
+                        "description": "Calculate percentiles per CPU (default: false)",
+                        "default": False,
+                    },
+                },
+                "required": ["file_path"],
             },
         ),
     ]
@@ -1337,6 +1495,123 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
             return [TextContent(
                 type="text",
                 text=f"Error comparing to baseline: {str(e)}"
+            )]
+
+    elif name == "extract_histogram":
+        file_path = arguments["file_path"]
+        include_per_cpu = arguments.get("include_per_cpu", True)
+
+        try:
+            path = Path(file_path)
+            if not path.exists():
+                return [TextContent(
+                    type="text",
+                    text=f"Error: File '{file_path}' does not exist"
+                )]
+
+            # Extract histogram data
+            histogram_data = extract_histogram_data(file_path)
+
+            if histogram_data["system_histogram"] is None:
+                return [TextContent(
+                    type="text",
+                    text=f"No histogram data found in '{path.name}'"
+                )]
+
+            result = f"Histogram Data from: {path.name}\n"
+            result += "=" * 60 + "\n\n"
+
+            # System-wide histogram summary
+            sys_hist = histogram_data["system_histogram"]
+            result += "System-Wide Histogram:\n"
+            result += f"  Total Buckets: {sys_hist['nbuckets']}\n"
+            result += f"  Total Samples: {sys_hist['total_samples']:,}\n"
+            result += f"  Latency Range: {sys_hist['buckets'][0]['latency_us']} - {sys_hist['buckets'][-1]['latency_us']} µs\n\n"
+
+            # Show top 10 buckets by count
+            top_buckets = sorted(sys_hist['buckets'], key=lambda b: b['count'], reverse=True)[:10]
+            result += "Top 10 Latency Values by Sample Count:\n"
+            for i, bucket in enumerate(top_buckets, 1):
+                pct = (bucket['count'] / sys_hist['total_samples']) * 100
+                result += f"  {i}. {bucket['latency_us']:3d} µs: {bucket['count']:>12,} samples ({pct:5.2f}%)\n"
+            result += "\n"
+
+            # Per-CPU summary
+            if include_per_cpu and histogram_data["per_cpu_histograms"]:
+                result += f"Per-CPU Histograms ({len(histogram_data['per_cpu_histograms'])} CPUs):\n"
+                for cpu_hist in histogram_data["per_cpu_histograms"]:
+                    cpu_id = cpu_hist["cpu_id"]
+                    total = cpu_hist["total_samples"]
+                    max_lat = cpu_hist["buckets"][-1]["latency_us"] if cpu_hist["buckets"] else 0
+                    result += f"  CPU {cpu_id}: {total:>12,} samples, max latency {max_lat} µs\n"
+
+            return [TextContent(type="text", text=result)]
+
+        except Exception as e:
+            return [TextContent(
+                type="text",
+                text=f"Error extracting histogram: {str(e)}"
+            )]
+
+    elif name == "get_percentiles":
+        file_path = arguments["file_path"]
+        percentiles = arguments.get("percentiles", [50, 90, 95, 99, 99.9, 99.99])
+        per_cpu = arguments.get("per_cpu", False)
+
+        try:
+            path = Path(file_path)
+            if not path.exists():
+                return [TextContent(
+                    type="text",
+                    text=f"Error: File '{file_path}' does not exist"
+                )]
+
+            # Extract histogram data
+            histogram_data = extract_histogram_data(file_path)
+
+            if histogram_data["system_histogram"] is None:
+                return [TextContent(
+                    type="text",
+                    text=f"No histogram data found in '{path.name}'"
+                )]
+
+            result = f"Latency Percentiles from: {path.name}\n"
+            result += "=" * 60 + "\n\n"
+
+            # System-wide percentiles
+            sys_hist = histogram_data["system_histogram"]
+            sys_percentiles = calculate_percentiles(sys_hist["buckets"], percentiles)
+
+            result += "System-Wide Percentiles:\n"
+            result += f"  Total Samples: {sys_hist['total_samples']:,}\n\n"
+
+            for p in percentiles:
+                key = f"P{p}"
+                if key in sys_percentiles:
+                    result += f"  {key:>7}: {sys_percentiles[key]:>6} µs\n"
+
+            # Per-CPU percentiles
+            if per_cpu and histogram_data["per_cpu_histograms"]:
+                result += "\n" + "=" * 60 + "\n"
+                result += "Per-CPU Percentiles:\n\n"
+
+                for cpu_hist in histogram_data["per_cpu_histograms"]:
+                    cpu_id = cpu_hist["cpu_id"]
+                    cpu_percentiles = calculate_percentiles(cpu_hist["buckets"], percentiles)
+
+                    result += f"CPU {cpu_id}:\n"
+                    for p in percentiles:
+                        key = f"P{p}"
+                        if key in cpu_percentiles:
+                            result += f"  {key:>7}: {cpu_percentiles[key]:>6} µs\n"
+                    result += "\n"
+
+            return [TextContent(type="text", text=result)]
+
+        except Exception as e:
+            return [TextContent(
+                type="text",
+                text=f"Error calculating percentiles: {str(e)}"
             )]
 
     else:
