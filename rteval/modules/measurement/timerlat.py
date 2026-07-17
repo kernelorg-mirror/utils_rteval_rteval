@@ -285,10 +285,25 @@ class Timerlat(rtevalModulePrototype):
             self.__timerlat_out.seek(0)
             self.__timerlat_err.seek(0)
 
+        # If cpuset is configured, launch process inside the cpuset
+        # This is critical for timerlat - migrating it mid-startup disrupts initialization
+        preexec_fn = None
+        if hasattr(self.__cfg, 'cpuset_path') and self.__cfg.cpuset_path:
+            def move_to_cpuset():
+                """Move child process into cpuset before exec"""
+                try:
+                    cpuset_procs = os.path.join(self.__cfg.cpuset_path, 'cgroup.procs')
+                    with open(cpuset_procs, 'w') as f:
+                        f.write(str(os.getpid()))
+                except Exception:
+                    pass  # Fail silently - parent will attempt migration as fallback
+            preexec_fn = move_to_cpuset
+
         self.__timerlat_process = subprocess.Popen(self.__cmd,
                                                    stdout=self.__timerlat_out,
                                                    stderr=self.__timerlat_err,
-                                                   stdin=None)
+                                                   stdin=None,
+                                                   preexec_fn=preexec_fn)
         self.__started = True
 
     def WorkloadAlive(self):

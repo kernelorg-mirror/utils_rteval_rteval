@@ -302,10 +302,25 @@ class Cyclictest(rtevalModulePrototype):
         if not self._logging:
             self.__cyclicoutput.seek(0)
 
+        # If cpuset is configured, launch process inside the cpuset
+        # This is critical for cyclictest - migrating it mid-startup disrupts initialization
+        preexec_fn = None
+        if hasattr(self.__cfg, 'cpuset_path') and self.__cfg.cpuset_path:
+            def move_to_cpuset():
+                """Move child process into cpuset before exec"""
+                try:
+                    cpuset_procs = os.path.join(self.__cfg.cpuset_path, 'cgroup.procs')
+                    with open(cpuset_procs, 'w') as f:
+                        f.write(str(os.getpid()))
+                except Exception:
+                    pass  # Fail silently - parent will attempt migration as fallback
+            preexec_fn = move_to_cpuset
+
         self.__cyclicprocess = subprocess.Popen(self.__cmd,
                                                 stdout=self.__cyclicoutput,
                                                 stderr=self.__nullfp,
-                                                stdin=self.__nullfp)
+                                                stdin=self.__nullfp,
+                                                preexec_fn=preexec_fn)
         self.__started = True
 
     def WorkloadAlive(self):

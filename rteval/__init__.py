@@ -174,6 +174,20 @@ class RtEval(rtevalReport):
                 print(f"started measurement threads on {onlinecpus} cores")
             print(f"Run duration: {str(self.__rtevcfg.duration)} seconds")
 
+            # Pass cpuset path to measurement modules so they can launch inside the cpuset
+            if self._cpuset_manager and self._cpuset_manager.measurement_cpuset:
+                cpuset_path = self._cpuset_manager.measurement_cpuset._cpuset_path
+                for (modname, mod) in self._measuremods._RtEvalModules__modules:
+                    # Try to find the config attribute - modules use self.__cfg (name-mangled)
+                    cfg = None
+                    for attr in ['_cfg', f'_{mod.__class__.__name__}__cfg']:
+                        if hasattr(mod, attr):
+                            cfg = getattr(mod, attr)
+                            break
+                    if cfg:
+                        cfg.cpuset_path = cpuset_path
+                        self.__logger.log(Log.DEBUG, f"Set cpuset_path for {modname}: {cpuset_path}")
+
             self._measuremods.Start()
 
             # Unleash the loads and measurement threads

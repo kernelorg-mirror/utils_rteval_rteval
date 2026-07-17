@@ -110,7 +110,7 @@ class Hackbench(CommandLineLoad):
 
         self.started = False
 
-    def __starton(self, node):
+    def __starton(self, node, initial=False):
         if self.__multinodes or self.cpulist:
             if self.__usenumactl:
                 args = ['numactl', '--cpunodebind', str(node)] + self.args
@@ -120,7 +120,9 @@ class Hackbench(CommandLineLoad):
         else:
             args = self.args
 
-        self._log(Log.DEBUG, f"starting on node {node}: args = {args}")
+        # Only log initial startup at DEBUG level to avoid spam
+        if initial:
+            self._log(Log.DEBUG, f"starting on node {node}: args = {args}")
         p = subprocess.Popen(args,
                              stdin=self.__nullfp,
                              stdout=self.__out,
@@ -137,7 +139,7 @@ class Hackbench(CommandLineLoad):
         # just do this once
         if not self.started:
             for n in self.nodes:
-                self.tasks[n] = self.__starton(n)
+                self.tasks[n] = self.__starton(n, initial=True)
             self.started = True
             return
 
@@ -145,7 +147,7 @@ class Hackbench(CommandLineLoad):
             try:
                 if self.tasks[n].poll() is not None:
                     self.tasks[n].wait()
-                    self.tasks[n] = self.__starton(n)
+                    self.tasks[n] = self.__starton(n, initial=False)
             except OSError as e:
                 if e.errno != errno.ENOMEM:
                     raise e
