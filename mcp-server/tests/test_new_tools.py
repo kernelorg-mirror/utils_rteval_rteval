@@ -21,7 +21,7 @@ async def test_find_best_worst():
     metric = "maximum"
     count = 3
 
-    files = list(directory.glob("*.xml"))
+    files = list(directory.glob("rteval-*/summary.xml"))
 
     print(f"Found {len(files)} XML files")
 
@@ -84,7 +84,7 @@ async def test_filter_results():
     directory = Path(__file__).parent.parent.parent
     kernel_pattern = "7.0"
 
-    files = list(directory.glob("*.xml"))
+    files = list(directory.glob("rteval-*/summary.xml"))
 
     print(f"Filtering for kernel pattern: {kernel_pattern}")
     print(f"Searching {len(files)} XML files\n")
