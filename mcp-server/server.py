@@ -1149,12 +1149,12 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
                     text=f"Error: Directory '{directory}' does not exist"
                 )]
 
-            # Find all XML files
-            files = list(path.glob("*.xml"))
+            # Find rteval result files
+            files = list(path.glob("rteval-*/summary.xml"))
             if not files:
                 return [TextContent(
                     type="text",
-                    text=f"No XML files found in '{directory}'"
+                    text=f"No rteval result files found in '{directory}'"
                 )]
 
             # Parse and filter
@@ -1262,12 +1262,12 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
                     text=f"Error: Directory '{directory}' does not exist"
                 )]
 
-            # Find all XML files
-            files = list(path.glob("*.xml"))
+            # Find rteval result files
+            files = list(path.glob("rteval-*/summary.xml"))
             if not files:
                 return [TextContent(
                     type="text",
-                    text=f"No XML files found in '{directory}'"
+                    text=f"No rteval result files found in '{directory}'"
                 )]
 
             # Parse and collect metrics
@@ -1380,11 +1380,11 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
                     text=f"Error: Directory '{directory}' does not exist"
                 )]
 
-            files = list(path.glob("*.xml"))
+            files = list(path.glob("rteval-*/summary.xml"))
             if not files:
                 return [TextContent(
                     type="text",
-                    text=f"No XML files found in '{directory}'"
+                    text=f"No rteval result files found in '{directory}'"
                 )]
 
             # Build comparison report
