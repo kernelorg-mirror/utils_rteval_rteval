@@ -245,8 +245,9 @@ class Timerlat(rtevalModulePrototype):
         self.__cmd.extend(['-c', self.__cpulist])
         self.__cmd.extend(['-E', str(self.__buckets)])
         self.__cmd.append('--no-summary')
-        # Disable auto-analysis
-        self.__cmd.append('--no-aa')
+        # Only disable auto-analysis if not using stoptrace (stoptrace needs it for trace analysis output)
+        if not self.__cfg.stoptrace:
+            self.__cmd.append('--no-aa')
 
         # Add dma-latency option if configured (default is 0)
         # If dma_latency is explicitly set to None, don't pass the option to rtla
@@ -472,7 +473,7 @@ class Timerlat(rtevalModulePrototype):
                 elif line.startswith('max:'):
                     #print(line)
                     continue
-                elif line.startswith('rtla timerlat hit stop tracing'):
+                elif line.startswith('timerlat hit stop tracing'):
                     self.__stoptrace = True
                     self.__posttrace += line
                     continue
@@ -521,9 +522,9 @@ class Timerlat(rtevalModulePrototype):
                                   f"(expected during process termination): {e}")
                         continue
 
-                # Generate statistics for each RunData object
-                for n in list(self.__timerlatdata.keys()):
-                    self.__timerlatdata[n].reduce()
+            # Generate statistics for each RunData object (after all parsing is complete)
+            for n in list(self.__timerlatdata.keys()):
+                self.__timerlatdata[n].reduce()
 
         except Exception as e:
             self._log(Log.ERR, f"Error parsing timerlat output: {e}")
