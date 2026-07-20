@@ -38,6 +38,8 @@ class RunData:
         self.__range = 0.0
         self.__mad = 0.0
         self._log = logfnc
+        self.__overflow_samples = 0  # Track samples that exceeded bucket range
+        self.__bucket_limit = None   # Maximum bucket index
 
     def __str__(self):
         retval = f"id:         {self.__id}\n"
@@ -61,11 +63,28 @@ class RunData:
         if value < self.__min:
             self.__min = value
 
+    def set_bucket_limit(self, limit):
+        """Set the maximum bucket index for overflow handling"""
+        self.__bucket_limit = limit
+
+    def get_overflow_count(self):
+        """Get the number of samples that exceeded the bucket limit"""
+        return self.__overflow_samples
+
     def bucket(self, index, value):
-        self.__samples[index] = self.__samples.setdefault(index, 0) + value
+        """Add samples to histogram bucket, clamping overflow to the last bucket"""
+        # Track the actual max before clamping
         if value:
             self.update_max(index)
             self.update_min(index)
+
+        # Clamp to bucket limit if set (overflow bucket)
+        if self.__bucket_limit is not None and index >= self.__bucket_limit:
+            if value:
+                self.__overflow_samples += value
+            index = self.__bucket_limit - 1  # Use last bucket as overflow bucket
+
+        self.__samples[index] = self.__samples.setdefault(index, 0) + value
         self.__numsamples += value
 
     def reduce(self):
@@ -166,8 +185,16 @@ class RunData:
             n = stat_n.newTextChild(None, 'standard_deviation', str(self.__stddev))
             n.newProp('unit', 'us')
 
+            # Report overflow samples if any
+            if self.__overflow_samples > 0:
+                n = stat_n.newTextChild(None, 'overflow_samples', str(self.__overflow_samples))
+                n.newProp('info', f'{self.__overflow_samples} samples exceeded histogram range')
+
             hist_n = rep_n.newChild(None, 'histogram', None)
             hist_n.newProp('nbuckets', str(len(self.__samples)))
+            if self.__overflow_samples > 0:
+                hist_n.newProp('overflow_bucket', str(self.__bucket_limit - 1))
+                hist_n.newProp('overflow_count', str(self.__overflow_samples))
             keys = list(self.__samples.keys())
             keys.sort()
             for k in keys:
@@ -205,12 +232,14 @@ class Cyclictest(rtevalModulePrototype):
             self.__cyclicdata[core] = RunData(core, 'core', self.__priority,
                                               logfnc=self._log)
             self.__cyclicdata[core].description = info[core]['model name']
+            self.__cyclicdata[core].set_bucket_limit(self.__buckets)
 
         # Create a RunData object for the overall system
         self.__cyclicdata['system'] = RunData('system',
                                               'system', self.__priority,
                                               logfnc=self._log)
         self.__cyclicdata['system'].description = (f"({self.__numcores} cores) ") + info['0']['model name']
+        self.__cyclicdata['system'].set_bucket_limit(self.__buckets)
 
         # Logging configuration
         self._logging = self.__cfg.setdefault('logging', False)
@@ -480,9 +509,10 @@ class Cyclictest(rtevalModulePrototype):
 
         # Let the user know if max latency overshot the number of buckets
         if self.__cyclicdata["system"].get_max() > self.__buckets:
-            self._log(Log.ERR, f'Max latency({self.__cyclicdata["system"].get_max()}us) exceeded histogram range({self.__buckets}us). Skipping statistics')
-            self._log(Log.ERR, "Increase number of buckets to avoid lost samples")
-            return rep_n
+            overflow_count = self.__cyclicdata["system"].get_overflow_count()
+            self._log(Log.WARN, f'Max latency({self.__cyclicdata["system"].get_max()}us) exceeded histogram range({self.__buckets}us)')
+            self._log(Log.WARN, f'{overflow_count} samples clamped to overflow bucket at index {self.__buckets - 1}')
+            self._log(Log.WARN, "Consider increasing buckets parameter for better resolution")
 
         rep_n.addChild(self.__cyclicdata["system"].MakeReport())
         for thr in self.__cpus:
