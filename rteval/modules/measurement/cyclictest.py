@@ -39,7 +39,6 @@ class RunData:
         self.__mad = 0.0
         self._log = logfnc
         self.__overflow_samples = 0  # Track samples that exceeded bucket range
-        self.__bucket_limit = None   # Maximum bucket index
 
     def __str__(self):
         retval = f"id:         {self.__id}\n"
@@ -63,28 +62,24 @@ class RunData:
         if value < self.__min:
             self.__min = value
 
-    def set_bucket_limit(self, limit):
-        """Set the maximum bucket index for overflow handling"""
-        self.__bucket_limit = limit
+    def set_overflow_count(self, count):
+        """Set overflow count from cyclictest output"""
+        self.__overflow_samples = count
+
+    def add_overflow_samples(self, count):
+        """Add to overflow count (for system-wide accumulation)"""
+        self.__overflow_samples += count
 
     def get_overflow_count(self):
         """Get the number of samples that exceeded the bucket limit"""
         return self.__overflow_samples
 
     def bucket(self, index, value):
-        """Add samples to histogram bucket, clamping overflow to the last bucket"""
-        # Track the actual max before clamping
+        """Add samples to histogram bucket"""
+        self.__samples[index] = self.__samples.setdefault(index, 0) + value
         if value:
             self.update_max(index)
             self.update_min(index)
-
-        # Clamp to bucket limit if set (overflow bucket)
-        if self.__bucket_limit is not None and index >= self.__bucket_limit:
-            if value:
-                self.__overflow_samples += value
-            index = self.__bucket_limit - 1  # Use last bucket as overflow bucket
-
-        self.__samples[index] = self.__samples.setdefault(index, 0) + value
         self.__numsamples += value
 
     def reduce(self):
@@ -193,7 +188,6 @@ class RunData:
             hist_n = rep_n.newChild(None, 'histogram', None)
             hist_n.newProp('nbuckets', str(len(self.__samples)))
             if self.__overflow_samples > 0:
-                hist_n.newProp('overflow_bucket', str(self.__bucket_limit - 1))
                 hist_n.newProp('overflow_count', str(self.__overflow_samples))
             keys = list(self.__samples.keys())
             keys.sort()
@@ -204,6 +198,13 @@ class RunData:
                 b_n = hist_n.newChild(None, 'bucket', None)
                 b_n.newProp('index', str(k))
                 b_n.newProp('value', str(self.__samples[k]))
+
+            # Add dedicated overflow bucket if overflow occurred
+            if self.__overflow_samples > 0:
+                b_n = hist_n.newChild(None, 'bucket', None)
+                b_n.newProp('index', 'overflow')
+                b_n.newProp('value', str(self.__overflow_samples))
+                b_n.newProp('type', 'overflow')
 
         return rep_n
 
@@ -232,14 +233,12 @@ class Cyclictest(rtevalModulePrototype):
             self.__cyclicdata[core] = RunData(core, 'core', self.__priority,
                                               logfnc=self._log)
             self.__cyclicdata[core].description = info[core]['model name']
-            self.__cyclicdata[core].set_bucket_limit(self.__buckets)
 
         # Create a RunData object for the overall system
         self.__cyclicdata['system'] = RunData('system',
                                               'system', self.__priority,
                                               logfnc=self._log)
         self.__cyclicdata['system'].description = (f"({self.__numcores} cores) ") + info['0']['model name']
-        self.__cyclicdata['system'].set_bucket_limit(self.__buckets)
 
         # Logging configuration
         self._logging = self.__cfg.setdefault('logging', False)
@@ -377,19 +376,51 @@ class Cyclictest(rtevalModulePrototype):
         except (IndexError, ValueError) as e:
             self._log(Log.WARN, f"Error parsing max latencies: {e}")
 
+    def _parse_histogram_overflows(self, line):
+        if not line.startswith('# Histogram Overflows:'):
+            return
+
+        try:
+            line = line.split(':')[1]
+            vals = [int(x) for x in line.split()]
+
+            # First N values are per-core overflow counts
+            for i, core in enumerate(self.__cpus):
+                if i < len(vals):
+                    overflow_count = vals[i]
+                    self.__cyclicdata[core].set_overflow_count(overflow_count)
+                    self.__cyclicdata['system'].add_overflow_samples(overflow_count)
+        except (IndexError, ValueError) as e:
+            self._log(Log.WARN, f"Error parsing histogram overflows: {e}")
 
     def _WorkloadCleanup(self):
         if not self.__started:
             return
 
         # Send SIGINT and wait for graceful exit
-        # Limit attempts to avoid infinite loop (RHEL-140898)
+        # Use wait(timeout) to return immediately when process exits
         max_attempts = 5
         attempt = 0
         while self.__cyclicprocess.poll() is None and attempt < max_attempts:
             self._log(Log.DEBUG, f"Sending SIGINT (attempt {attempt + 1}/{max_attempts})")
             os.kill(self.__cyclicprocess.pid, signal.SIGINT)
-            time.sleep(2)
+
+            # Use longer timeout on first attempt to allow histogram output to complete
+            # Subsequent attempts use shorter timeouts
+            if attempt == 0:
+                timeout = 10  # First attempt: 10 seconds for histogram output
+            elif attempt == 1:
+                timeout = 5   # Second attempt: 5 seconds
+            else:
+                timeout = 2   # Remaining attempts: 2 seconds
+
+            try:
+                self.__cyclicprocess.wait(timeout=timeout)
+                break  # Process exited gracefully
+            except subprocess.TimeoutExpired:
+                # Process still running after timeout, will try again
+                pass
+
             attempt += 1
 
         # Check if process exited
@@ -431,6 +462,8 @@ class Cyclictest(rtevalModulePrototype):
                             self._log(Log.WARN, f"Error parsing break value: {e}")
                     elif line.startswith('# Max Latencies: '):
                         self._parse_max_latencies(line)
+                    elif line.startswith('# Histogram Overflows:'):
+                        self._parse_histogram_overflows(line)
                     continue
 
                 # Skipping blank lines
@@ -508,10 +541,10 @@ class Cyclictest(rtevalModulePrototype):
             rep_n.addChild(abrt_n)
 
         # Let the user know if max latency overshot the number of buckets
-        if self.__cyclicdata["system"].get_max() > self.__buckets:
+        if self.__cyclicdata["system"].get_max() >= self.__buckets:
             overflow_count = self.__cyclicdata["system"].get_overflow_count()
             self._log(Log.WARN, f'Max latency({self.__cyclicdata["system"].get_max()}us) exceeded histogram range({self.__buckets}us)')
-            self._log(Log.WARN, f'{overflow_count} samples clamped to overflow bucket at index {self.__buckets - 1}')
+            self._log(Log.WARN, f'{overflow_count} samples stored in overflow bucket')
             self._log(Log.WARN, "Consider increasing buckets parameter for better resolution")
 
         rep_n.addChild(self.__cyclicdata["system"].MakeReport())

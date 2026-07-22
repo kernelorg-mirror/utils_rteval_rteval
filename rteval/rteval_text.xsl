@@ -163,7 +163,23 @@
           <xsl:text>not present</xsl:text>
         </xsl:otherwise>
     </xsl:choose>
-    <xsl:text>&#10;&#10;</xsl:text>
+    <xsl:text>&#10;</xsl:text>
+
+    <!-- Display total overflow samples if present -->
+    <xsl:if test="Measurements/cyclictest/system/statistics/overflow_samples or Measurements/timerlat/system/statistics/overflow_samples">
+      <xsl:text>   Total Overflows: </xsl:text>
+      <xsl:choose>
+        <xsl:when test="Measurements/cyclictest/system/statistics/overflow_samples">
+          <xsl:value-of select="Measurements/cyclictest/system/statistics/overflow_samples"/>
+        </xsl:when>
+        <xsl:when test="Measurements/timerlat/system/statistics/overflow_samples">
+          <xsl:value-of select="Measurements/timerlat/system/statistics/overflow_samples"/>
+        </xsl:when>
+      </xsl:choose>
+      <xsl:text> samples exceeded histogram range</xsl:text>
+      <xsl:text>&#10;</xsl:text>
+    </xsl:if>
+    <xsl:text>&#10;</xsl:text>
 
     <!-- Display core sharing warnings if present -->
     <xsl:if test="SystemInfo/CPUtopology/CoreSharingWarnings/warning">
@@ -321,6 +337,12 @@
       <xsl:value-of select="standard_deviation"/>
       <xsl:value-of select="standard_deviation/@unit"/>
       <xsl:text>&#10;</xsl:text>
+
+      <xsl:if test="overflow_samples">
+        <xsl:text>            Overflow samples:  </xsl:text>
+        <xsl:value-of select="overflow_samples"/>
+        <xsl:text>&#10;</xsl:text>
+      </xsl:if>
     </xsl:if>
     <xsl:text>&#10;</xsl:text>
   </xsl:template>
@@ -428,6 +450,12 @@
       <xsl:value-of select="standard_deviation"/>
       <xsl:value-of select="standard_deviation/@unit"/>
       <xsl:text>&#10;</xsl:text>
+
+      <xsl:if test="overflow_samples">
+        <xsl:text>            Overflow samples:  </xsl:text>
+        <xsl:value-of select="overflow_samples"/>
+        <xsl:text>&#10;</xsl:text>
+      </xsl:if>
     </xsl:if>
     <xsl:text>&#10;</xsl:text>
   </xsl:template>

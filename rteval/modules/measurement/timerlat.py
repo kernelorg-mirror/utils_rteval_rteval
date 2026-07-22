@@ -39,6 +39,7 @@ class TLRunData:
         self.__mode = 0.0
         self.__median = 0.0
         self.__range = 0.0
+        self.__overflow_samples = 0  # Track samples that exceeded bucket range
 
     def update_max(self, value):
         """ highest bucket with a value """
@@ -49,6 +50,18 @@ class TLRunData:
         """ lowest bucket with a value """
         if value < self.min:
             self.min = value
+
+    def set_overflow_count(self, count):
+        """Set overflow count from rtla timerlat output"""
+        self.__overflow_samples = count
+
+    def add_overflow_samples(self, count):
+        """Add to overflow count (for system-wide accumulation)"""
+        self.__overflow_samples += count
+
+    def get_overflow_count(self):
+        """Get the number of samples that exceeded the bucket limit"""
+        return self.__overflow_samples
 
     def bucket(self, index, val1, val2, val3):
         """ Store results index=bucket number, val1=IRQ, val2=thr, val3=usr """
@@ -158,8 +171,15 @@ class TLRunData:
             n = stat_n.newTextChild(None, 'standard_deviation', str(self.__stddev))
             n.newProp('unit', 'us')
 
+            # Report overflow samples if any
+            if self.__overflow_samples > 0:
+                n = stat_n.newTextChild(None, 'overflow_samples', str(self.__overflow_samples))
+                n.newProp('info', f'{self.__overflow_samples} samples exceeded histogram range')
+
         hist_n = rep_n.newChild(None, 'histogram', None)
         hist_n.newProp('nbuckets', str(len(self.__samples)))
+        if self.__overflow_samples > 0:
+            hist_n.newProp('overflow_count', str(self.__overflow_samples))
 
         keys = list(self.__samples.keys())
         keys.sort()
@@ -170,6 +190,13 @@ class TLRunData:
             b_n = hist_n.newChild(None, 'bucket', None)
             b_n.newProp('index', str(k))
             b_n.newProp('value', str(self.__samples[k]))
+
+        # Add dedicated overflow bucket if overflow occurred
+        if self.__overflow_samples > 0:
+            b_n = hist_n.newChild(None, 'bucket', None)
+            b_n.newProp('index', 'overflow')
+            b_n.newProp('value', str(self.__overflow_samples))
+            b_n.newProp('type', 'overflow')
 
         return rep_n
 
@@ -323,13 +350,30 @@ class Timerlat(rtevalModulePrototype):
             return
 
         # Send SIGINT and wait for graceful exit
-        # Limit attempts to avoid infinite loop and double-SIGINT issues (RHEL-140898)
+        # Give timerlat time to write complete histogram (including 'over:' line)
+        # Use wait(timeout) to return immediately when process exits
         max_attempts = 5
         attempt = 0
         while self.__timerlat_process.poll() is None and attempt < max_attempts:
             self._log(Log.DEBUG, f"Sending SIGINT (attempt {attempt + 1}/{max_attempts})")
             os.kill(self.__timerlat_process.pid, signal.SIGINT)
-            time.sleep(2)
+
+            # Use longer timeout on first attempt to allow histogram output to complete
+            # Subsequent attempts use shorter timeouts
+            if attempt == 0:
+                timeout = 10  # First attempt: 10 seconds for histogram output
+            elif attempt == 1:
+                timeout = 5   # Second attempt: 5 seconds
+            else:
+                timeout = 2   # Remaining attempts: 2 seconds
+
+            try:
+                self.__timerlat_process.wait(timeout=timeout)
+                break  # Process exited gracefully
+            except subprocess.TimeoutExpired:
+                # Process still running after timeout, will try again
+                pass
+
             attempt += 1
 
         # Check if process exited
@@ -459,7 +503,29 @@ class Timerlat(rtevalModulePrototype):
                     #print(line)
                     continue
                 elif line.startswith('over:'):
-                    #print(line)
+                    # Parse overflow counts: 3 values per CPU (IRQ, Thread, User)
+                    vals = line.split()
+                    if not vals or vals[0] != 'over:':
+                        continue
+                    try:
+                        for i, core in enumerate(self.__cpus):
+                            # timerlat has 3 columns per core: IRQ, Thread, User
+                            # Calculate total overflow for this core
+                            if i*3 + 3 < len(vals):
+                                irq_overflow = int(vals[i*3+1])
+                                thr_overflow = int(vals[i*3+2])
+                                usr_overflow = int(vals[i*3+3])
+                                total_overflow = irq_overflow + thr_overflow + usr_overflow
+
+                                self.__timerlatdata[core].set_overflow_count(total_overflow)
+                                self.__timerlatdata['system'].add_overflow_samples(total_overflow)
+
+                                # If overflow occurred, max latency is at least the bucket limit
+                                if total_overflow > 0:
+                                    self.__timerlatdata[core].update_max(self.__buckets)
+                                    self.__timerlatdata['system'].update_max(self.__buckets)
+                    except (IndexError, ValueError) as e:
+                        self._log(Log.DEBUG, f"Error parsing overflow line: {e}")
                     continue
                 elif line.startswith('count:'):
                     #print(line)
@@ -602,6 +668,13 @@ class Timerlat(rtevalModulePrototype):
                         cpu_n.newProp('unit', 'us')
                         rep_n.addChild(max_timerlat_n)
             return rep_n
+
+        # Let the user know if max latency overshot the number of buckets
+        if self.__timerlatdata["system"].max >= self.__buckets:
+            overflow_count = self.__timerlatdata["system"].get_overflow_count()
+            self._log(Log.WARN, f'Max latency({self.__timerlatdata["system"].max}us) exceeded histogram range({self.__buckets}us)')
+            self._log(Log.WARN, f'{overflow_count} samples stored in overflow bucket')
+            self._log(Log.WARN, "Consider increasing buckets parameter for better resolution")
 
         rep_n.addChild(self.__timerlatdata['system'].MakeReport())
         for thr in self.__cpus:
