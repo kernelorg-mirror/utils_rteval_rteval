@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# SPDX-License-Identifier: GPL-2.0-only
+# SPDX-License-Identifier: GPL-2.0-or-later
 # Copyright 2026 John Kacur <jkacur@redhat.com>
 """
 Unit tests for rteval CpusetManager functionality.
