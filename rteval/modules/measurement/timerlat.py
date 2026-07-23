@@ -653,7 +653,7 @@ class Timerlat(rtevalModulePrototype):
         rep_n.addChild(stoptrace_invoked_n)
 
         if self.stcpu != -1:
-            self._log(Log.DEBUG, f'self.__stdata = {self.__stdata}')
+            # self._log(Log.DEBUG, f'self.__stdata = {self.__stdata}')
             for cpu in self.__stdata:
                 # This is  Max timerlat IRQ latency from idle
                 # With no other data from that cpu, so don't create a
@@ -663,7 +663,7 @@ class Timerlat(rtevalModulePrototype):
                 stoptrace_n = libxml2.newNode('stoptrace_report')
                 stoptrace_n.newProp("CPU", str(cpu))
                 for k, v in self.__stdata[cpu].items():
-                    self._log(Log.DEBUG, f"cpu={cpu}, k={k}, v={v}")
+                    # self._log(Log.DEBUG, f"cpu={cpu}, k={k}, v={v}")
                     if isinstance(v, tuple):
                         latency = str(v[0])
                         percent = str(v[1])
@@ -687,8 +687,8 @@ class Timerlat(rtevalModulePrototype):
                         cpu_n.newProp('unit', 'us')
                 rep_n.addChild(stoptrace_n)
 
-            self._log(Log.DEBUG, f'timerlat: posttrace = \n{self.__posttrace}')
-            self._log(Log.DEBUG, 'timerlat: posttrace END')
+            # self._log(Log.DEBUG, f'timerlat: posttrace = \n{self.__posttrace}')
+            # self._log(Log.DEBUG, 'timerlat: posttrace END')
             for cpu in self.__stdata:
                 for k, v in self.__stdata[cpu].items():
                     if isinstance(v, tuple):
