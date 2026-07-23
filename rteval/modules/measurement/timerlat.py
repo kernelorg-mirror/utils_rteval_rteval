@@ -256,6 +256,54 @@ class Timerlat(rtevalModulePrototype):
             os.makedirs(logdir)
         return os.open(os.path.join(logdir, name), os.O_CREAT|os.O_RDWR|os.O_TRUNC)
 
+    def _parse_max_latencies(self, line):
+        """Parse the max: line from rtla timerlat output"""
+        if not line.startswith('max:'):
+            return
+
+        try:
+            vals = line.split()
+            if not vals or vals[0] != 'max:':
+                return
+
+            for i, core in enumerate(self.__cpus):
+                # timerlat has 3 columns per core: IRQ, Thread, User
+                # Take the maximum of the 3 values as the overall max for this core
+                if i*3 + 3 < len(vals):
+                    irq_max = int(vals[i*3+1])
+                    thr_max = int(vals[i*3+2])
+                    usr_max = int(vals[i*3+3])
+                    core_max = max(irq_max, thr_max, usr_max)
+
+                    self.__timerlatdata[core].update_max(core_max)
+                    self.__timerlatdata['system'].update_max(core_max)
+        except (IndexError, ValueError) as e:
+            self._log(Log.DEBUG, f"Error parsing max line: {e}")
+
+    def _parse_histogram_overflows(self, line):
+        """Parse the over: line from rtla timerlat output"""
+        if not line.startswith('over:'):
+            return
+
+        try:
+            vals = line.split()
+            if not vals or vals[0] != 'over:':
+                return
+
+            for i, core in enumerate(self.__cpus):
+                # timerlat has 3 columns per core: IRQ, Thread, User
+                # Calculate total overflow for this core
+                if i*3 + 3 < len(vals):
+                    irq_overflow = int(vals[i*3+1])
+                    thr_overflow = int(vals[i*3+2])
+                    usr_overflow = int(vals[i*3+3])
+                    total_overflow = irq_overflow + thr_overflow + usr_overflow
+
+                    self.__timerlatdata[core].set_overflow_count(total_overflow)
+                    self.__timerlatdata['system'].add_overflow_samples(total_overflow)
+        except (IndexError, ValueError) as e:
+            self._log(Log.DEBUG, f"Error parsing overflow line: {e}")
+
     def _WorkloadSetup(self):
         self.__timerlat_process = None
 
@@ -271,7 +319,7 @@ class Timerlat(rtevalModulePrototype):
         self.__cmd.extend(['-P', f'f:{int(self.__priority)}', '-u'])
         self.__cmd.extend(['-c', self.__cpulist])
         self.__cmd.extend(['-E', str(self.__buckets)])
-        self.__cmd.append('--no-summary')
+        # self.__cmd.append('--no-summary')  # Commented out to get max: line for accurate overflow max values
         # Only disable auto-analysis if not using stoptrace (stoptrace needs it for trace analysis output)
         if not self.__cfg.stoptrace:
             self.__cmd.append('--no-aa')
@@ -405,6 +453,7 @@ class Timerlat(rtevalModulePrototype):
             blocking_thread_detected = False
             softirq_interference_detected = False
             irq_interference_detected = False
+            max_parsed = False  # Track if we've already parsed the max: line
 
             for line in output_lines:
                 if isinstance(line, bytes):
@@ -503,29 +552,7 @@ class Timerlat(rtevalModulePrototype):
                     #print(line)
                     continue
                 elif line.startswith('over:'):
-                    # Parse overflow counts: 3 values per CPU (IRQ, Thread, User)
-                    vals = line.split()
-                    if not vals or vals[0] != 'over:':
-                        continue
-                    try:
-                        for i, core in enumerate(self.__cpus):
-                            # timerlat has 3 columns per core: IRQ, Thread, User
-                            # Calculate total overflow for this core
-                            if i*3 + 3 < len(vals):
-                                irq_overflow = int(vals[i*3+1])
-                                thr_overflow = int(vals[i*3+2])
-                                usr_overflow = int(vals[i*3+3])
-                                total_overflow = irq_overflow + thr_overflow + usr_overflow
-
-                                self.__timerlatdata[core].set_overflow_count(total_overflow)
-                                self.__timerlatdata['system'].add_overflow_samples(total_overflow)
-
-                                # If overflow occurred, max latency is at least the bucket limit
-                                if total_overflow > 0:
-                                    self.__timerlatdata[core].update_max(self.__buckets)
-                                    self.__timerlatdata['system'].update_max(self.__buckets)
-                    except (IndexError, ValueError) as e:
-                        self._log(Log.DEBUG, f"Error parsing overflow line: {e}")
+                    self._parse_histogram_overflows(line)
                     continue
                 elif line.startswith('count:'):
                     #print(line)
@@ -537,15 +564,20 @@ class Timerlat(rtevalModulePrototype):
                     #print(line)
                     continue
                 elif line.startswith('max:'):
-                    #print(line)
+                    # Only parse the first max: line (per-core data)
+                    # Skip subsequent max: lines (like the ALL: section)
+                    if not max_parsed:
+                        self._parse_max_latencies(line)
+                        max_parsed = True
+                        # Max line is the last histogram data we need
+                        # If stoptrace is enabled, continue parsing for trace analysis
+                        # Otherwise stop to avoid the ALL: section
+                        if not self.__cfg.stoptrace:
+                            break
                     continue
                 elif line.startswith('timerlat hit stop tracing'):
                     self.__stoptrace = True
                     self.__posttrace += line
-                    continue
-                elif line.startswith('ALL:'):
-                    # We should only see 'ALL:' without timerlat --no-summary
-                    # print(line)
                     continue
                 else:
                     #print(line)
