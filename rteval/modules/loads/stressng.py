@@ -82,7 +82,7 @@ class Stressng(CommandLineLoad):
         if self.cpulist:
             for node in nodes:
                 cpulist = ",".join([str(n) for n in cpus[node]])
-                self.args.append(f'--taskset {cpulist}')
+                self.args.extend(['--taskset', cpulist])
 
     def _WorkloadTask(self):
         """ Kick of the workload here """
