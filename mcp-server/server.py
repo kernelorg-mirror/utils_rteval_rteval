@@ -193,51 +193,74 @@ def extract_histogram_data(file_path: str) -> dict[str, Any]:
         "per_cpu_histograms": []
     }
 
-    # Extract system-wide histogram
-    timerlat = root.find(".//timerlat")
-    if timerlat is not None:
+    # Extract system-wide histogram - try timerlat first, then cyclictest
+    measurement = root.find(".//timerlat")
+    if measurement is None:
+        measurement = root.find(".//cyclictest")
+
+    if measurement is not None:
         # System-wide histogram is under <system> tag
-        system_elem = timerlat.find("system")
+        system_elem = measurement.find("system")
         system_histogram = None
         if system_elem is not None:
             system_histogram = system_elem.find("histogram")
 
         if system_histogram is not None:
             nbuckets = int(system_histogram.get("nbuckets", "0"))
+            overflow_count = int(system_histogram.get("overflow_count", "0"))
             buckets = []
+            overflow_bucket = None
 
             for bucket in system_histogram.findall("bucket"):
-                index = int(bucket.get("index"))
+                index_str = bucket.get("index")
                 count = int(bucket.get("value"))
-                buckets.append({"latency_us": index, "count": count})
+
+                # Handle overflow bucket specially
+                if index_str == "overflow":
+                    overflow_bucket = {"type": "overflow", "count": count}
+                else:
+                    index = int(index_str)
+                    buckets.append({"latency_us": index, "count": count})
 
             result["system_histogram"] = {
                 "nbuckets": nbuckets,
                 "buckets": buckets,
-                "total_samples": sum(b["count"] for b in buckets)
+                "total_samples": sum(b["count"] for b in buckets),
+                "overflow_count": overflow_count,
+                "overflow_bucket": overflow_bucket
             }
 
         # Extract per-CPU histograms
-        for core in timerlat.findall("core"):
+        for core in measurement.findall("core"):
             core_id = core.get("id")
             priority = core.get("priority")
             histogram = core.find("histogram")
 
             if histogram is not None:
                 nbuckets = int(histogram.get("nbuckets", "0"))
+                overflow_count = int(histogram.get("overflow_count", "0"))
                 buckets = []
+                overflow_bucket = None
 
                 for bucket in histogram.findall("bucket"):
-                    index = int(bucket.get("index"))
+                    index_str = bucket.get("index")
                     count = int(bucket.get("value"))
-                    buckets.append({"latency_us": index, "count": count})
+
+                    # Handle overflow bucket specially
+                    if index_str == "overflow":
+                        overflow_bucket = {"type": "overflow", "count": count}
+                    else:
+                        index = int(index_str)
+                        buckets.append({"latency_us": index, "count": count})
 
                 result["per_cpu_histograms"].append({
                     "cpu_id": core_id,
                     "priority": priority,
                     "nbuckets": nbuckets,
                     "buckets": buckets,
-                    "total_samples": sum(b["count"] for b in buckets)
+                    "total_samples": sum(b["count"] for b in buckets),
+                    "overflow_count": overflow_count,
+                    "overflow_bucket": overflow_bucket
                 })
 
     return result
@@ -1603,7 +1626,11 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
             result += "System-Wide Histogram:\n"
             result += f"  Total Buckets: {sys_hist['nbuckets']}\n"
             result += f"  Total Samples: {sys_hist['total_samples']:,}\n"
-            result += f"  Latency Range: {sys_hist['buckets'][0]['latency_us']} - {sys_hist['buckets'][-1]['latency_us']} µs\n\n"
+            result += f"  Latency Range: {sys_hist['buckets'][0]['latency_us']} - {sys_hist['buckets'][-1]['latency_us']} µs\n"
+            if sys_hist['overflow_count'] > 0:
+                overflow_pct = (sys_hist['overflow_count'] / (sys_hist['total_samples'] + sys_hist['overflow_count'])) * 100
+                result += f"  ⚠️  Overflow Samples: {sys_hist['overflow_count']:,} ({overflow_pct:.3f}%) - exceeded histogram range\n"
+            result += "\n"
 
             # Show top 10 buckets by count
             top_buckets = sorted(sys_hist['buckets'], key=lambda b: b['count'], reverse=True)[:10]
@@ -1620,7 +1647,9 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
                     cpu_id = cpu_hist["cpu_id"]
                     total = cpu_hist["total_samples"]
                     max_lat = cpu_hist["buckets"][-1]["latency_us"] if cpu_hist["buckets"] else 0
-                    result += f"  CPU {cpu_id}: {total:>12,} samples, max latency {max_lat} µs\n"
+                    overflow = cpu_hist["overflow_count"]
+                    overflow_str = f", overflow: {overflow}" if overflow > 0 else ""
+                    result += f"  CPU {cpu_id}: {total:>12,} samples, max latency {max_lat} µs{overflow_str}\n"
 
             return [TextContent(type="text", text=result)]
 
