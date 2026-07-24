@@ -60,6 +60,13 @@ unit-tests:
 	@echo "Running unit tests..."
 	./tests/run_tests.sh
 
+mcp-tests:
+	@echo "Running MCP server tests..."
+	@echo "These tests require rteval result files to be present"
+	@echo ""
+	$(PYTHON) mcp-server/tests/test_histogram.py
+	$(PYTHON) mcp-server/tests/test_per_cpu_stats.py
+
 tests: unit-tests
 
 test-all:
@@ -135,6 +142,7 @@ help:
 	@echo "        runit:            do a short testrun locally [default]"
 	@echo "        tests:            run unit tests (alias for unit-tests)"
 	@echo "        unit-tests:       run unit tests"
+	@echo "        mcp-tests:        run MCP server tests (requires rteval result files)"
 	@echo "        test-all:         run ALL tests including root-required tests (requires root)"
 	@echo "        e2e-tests:        run end-to-end tests"
 	@echo "        regression-tests: run regression tests for measurement modules (requires root)"
@@ -157,4 +165,4 @@ tags:
 cleantags:
 	rm -f tags
 
-.PHONY: tests unit-tests test-all e2e-tests regression-tests cpuset-tests uninstall
+.PHONY: tests unit-tests mcp-tests test-all e2e-tests regression-tests cpuset-tests uninstall

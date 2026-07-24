@@ -13,7 +13,18 @@ from server import extract_histogram_data, calculate_percentiles
 # Find test file relative to script location
 # From tests/ -> mcp-server/ -> rteval/
 script_dir = Path(__file__).parent
-test_file = script_dir.parent.parent / "rteval-20260714-1" / "summary.xml"
+rteval_dir = script_dir.parent.parent
+
+# Find any rteval result directory with summary.xml
+test_files = list(rteval_dir.glob("rteval-*/summary.xml"))
+if not test_files:
+    print("ERROR: No rteval result files found in", rteval_dir)
+    print("Please run rteval to generate test data first.")
+    sys.exit(1)
+
+# Use the most recent file
+test_file = sorted(test_files)[-1]
+print(f"Using test file: {test_file.parent.name}/summary.xml\n")
 
 print("Testing histogram extraction...")
 print("=" * 60)

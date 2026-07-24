@@ -14,15 +14,18 @@ async def main():
     print("Testing get_per_cpu_stats tool")
     print("=" * 60)
 
-    # Find test data
+    # Find test data - use any available rteval result
     rteval_dir = Path(__file__).parent.parent.parent
-    test_file = rteval_dir / "rteval-20260714-1" / "summary.xml"
+    test_files = list(rteval_dir.glob("rteval-*/summary.xml"))
 
-    if not test_file.exists():
-        print(f"✗ Test file not found: {test_file}")
+    if not test_files:
+        print(f"✗ No rteval result files found in {rteval_dir}")
+        print("Please run rteval to generate test data first.")
         sys.exit(1)
 
-    print(f"\nUsing test file: {test_file.name}\n")
+    # Use the most recent file
+    test_file = sorted(test_files)[-1]
+    print(f"\nUsing test file: {test_file.parent.name}/summary.xml\n")
 
     # Test 1: Basic per-CPU stats (sorted by maximum)
     print("1. Basic per-CPU stats sorted by maximum latency...")
