@@ -79,10 +79,16 @@ class Stressng(CommandLineLoad):
             if not cpu:
                 nodes.remove(node)
                 self._log(Log.DEBUG, f"node {node} has no available cpus, removing")
-        if self.cpulist:
-            for node in nodes:
-                cpulist = ",".join([str(n) for n in cpus[node]])
-                self.args.extend(['--taskset', cpulist])
+
+        # Always apply taskset to restrict stress-ng to available CPUs
+        # This ensures isolated CPUs are excluded (reserved for measurement modules)
+        all_cpus = []
+        for node in nodes:
+            all_cpus.extend(cpus[node])
+
+        if all_cpus:
+            cpulist = ",".join([str(c) for c in all_cpus])
+            self.args.extend(['--taskset', cpulist])
 
     def _WorkloadTask(self):
         """ Kick of the workload here """
