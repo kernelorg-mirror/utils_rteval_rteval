@@ -23,8 +23,8 @@ class Stressng(CommandLineLoad):
         self.__err = None
         self.__nullfp = None
         self.args = None
-        " Only run this module if the user specifies an option "
-        if self.cfg.option is not None:
+        " Only run this module if the user specifies an stressor "
+        if self.cfg.stressor is not None:
             self._donotrun = False
         else:
             self._donotrun = True
@@ -49,11 +49,11 @@ class Stressng(CommandLineLoad):
         else:
             self.__out = self.__err = self.__nullfp
 
-        # stress-ng is only run if the user specifies an option
+        # stress-ng is only run if the user specifies an stressor
         self.args = ['stress-ng']
-        self.args.append(f'--{str(self.cfg.option)}')
-        if self.cfg.arg is not None:
-            self.args.append(self.cfg.arg)
+        self.args.append(f'--{str(self.cfg.stressor)}')
+        if self.cfg.workers is not None:
+            self.args.append(self.cfg.workers) #default is 0
         if self.cfg.timeout is not None:
             self.args.append('--timeout')
             self.args.append(self.cfg.timeout)
@@ -135,13 +135,14 @@ def create(config, logger):
 def ModuleParameters():
     """ Commandline options for Stress-ng """
     return {
-        "option": {
-            "descr": "stressor specific option",
-            "metavar": "OPTION"
+        "stressor": {
+            "descr": "stressor name (eg. vm, cpu)",
+            "metavar": "STRESSOR"
         },
-        "arg": {
-            "descr": "stressor specific arg",
-            "metavar" : "ARG"
+        "workers": {
+            "descr": "number of workers(default: 0 = one per CPU)",
+            "default": "0",
+            "metavar" : "N"
         },
         "timeout": {
             "descr": "timeout after T seconds",

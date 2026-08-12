@@ -20,15 +20,15 @@ check "stress-ng debug" \
     "--onlyload -D -d 1" 0 '\[DEBUG\]'
 
 check "stress-ng command" \
-    "--onlyload -D -d 1 --stressng-option procfs --stressng-arg 1" 0 \
+    "--onlyload -D -d 1 --stressng-stressor procfs --stressng-workers 1" 0 \
     'starting with stress-ng --procfs 1 --taskset'
 
 check "stress-ng command, with --loads-cpulist" \
-    "--onlyload -D -d 1 --loads-cpulist=0-2 --stressng-option procfs --stressng-arg 1" 0 \
+    "--onlyload -D -d 1 --loads-cpulist=0-2 --stressng-stressor procfs --stressng-workers 1" 0 \
     'starting with stress-ng --procfs 1 --taskset 0,1,2'
 
 check "stress-ng command, with --stressng-timeout" \
-    "--onlyload -D -d 1 --stressng-option procfs --stressng-arg 1 --stressng-timeout 2" 0 \
+    "--onlyload -D -d 1 --stressng-stressor procfs --stressng-workers 1 --stressng-timeout 2" 0 \
     'starting with stress-ng --procfs 1 --timeout 2'
 
 # hackbench checks
