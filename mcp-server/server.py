@@ -109,6 +109,44 @@ def parse_rtla_command(cmd_line: str) -> dict[str, str]:
     return params
 
 
+def extract_load_info(file_path: str) -> dict[str, Any]:
+    """Extract load configuration and metrics from an rteval XML file.
+
+    Returns information about what load generators were running during the test,
+    including load average, CPU assignments, and per-load details.
+    """
+    tree = ET.parse(file_path)
+    root = tree.getroot()
+
+    load_info = {
+        "file": file_path,
+        "load_average": None,
+        "load_cpus": None,
+        "num_load_types": 0,
+        "load_generators": []
+    }
+
+    loads_elem = root.find(".//loads")
+    if loads_elem is not None:
+        load_info["load_average"] = loads_elem.get("load_average")
+        load_info["load_cpus"] = loads_elem.get("loadcpus")
+        load_info["num_load_types"] = int(loads_elem.get("loads", "0"))
+
+        # Extract each load generator
+        for cmd in loads_elem.findall("command_line"):
+            load_name = cmd.get("name")
+            job_instances = int(cmd.get("job_instances", "1"))
+            command_text = cmd.text.strip() if cmd.text else ""
+
+            load_info["load_generators"].append({
+                "name": load_name,
+                "job_instances": job_instances,
+                "command": command_text
+            })
+
+    return load_info
+
+
 def extract_rteval_data(file_path: str) -> dict[str, Any]:
     """Extract key data from an rteval XML file for comparison."""
     tree = ET.parse(file_path)
@@ -119,6 +157,7 @@ def extract_rteval_data(file_path: str) -> dict[str, Any]:
         "rteval_version": root.get("version", "unknown"),
         "run_info": {},
         "system_info": {},
+        "load_info": {},
         "measurements": {}
     }
 
@@ -150,6 +189,23 @@ def extract_rteval_data(file_path: str) -> dict[str, Any]:
                         data["system_info"]["is_RT"] = node.get("is_RT", "0") == "1"
                     else:
                         data["system_info"][elem] = node.text
+
+    # Load information
+    loads_elem = root.find(".//loads")
+    if loads_elem is not None:
+        data["load_info"]["load_average"] = loads_elem.get("load_average")
+        data["load_info"]["load_cpus"] = loads_elem.get("loadcpus")
+        data["load_info"]["num_load_types"] = int(loads_elem.get("loads", "0"))
+        data["load_info"]["load_generators"] = []
+
+        for cmd in loads_elem.findall("command_line"):
+            load_name = cmd.get("name")
+            job_instances = int(cmd.get("job_instances", "1"))
+
+            data["load_info"]["load_generators"].append({
+                "name": load_name,
+                "job_instances": job_instances
+            })
 
     # Timerlat measurements
     timerlat = root.find(".//timerlat")
@@ -517,6 +573,18 @@ async def list_tools() -> list[Tool]:
                         "type": "number",
                         "description": "Filter results with max latency below this threshold (µs)",
                     },
+                    "load_type": {
+                        "type": "string",
+                        "description": "Filter by load generator type (e.g., 'kcompile', 'hackbench', 'stressng')",
+                    },
+                    "min_load_average": {
+                        "type": "number",
+                        "description": "Minimum load average threshold",
+                    },
+                    "max_load_average": {
+                        "type": "number",
+                        "description": "Maximum load average threshold",
+                    },
                 },
                 "required": [],
             },
@@ -635,6 +703,20 @@ async def list_tools() -> list[Tool]:
                     "highlight_threshold": {
                         "type": "number",
                         "description": "Highlight CPUs with max latency above this threshold in µs (optional)",
+                    },
+                },
+                "required": ["file_path"],
+            },
+        ),
+        Tool(
+            name="get_load_info",
+            description="Extract load configuration and metrics from an rteval result file",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "file_path": {
+                        "type": "string",
+                        "description": "Path to the rteval XML result file",
                     },
                 },
                 "required": ["file_path"],
@@ -1138,6 +1220,7 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
             max_latencies = []
             mean_latencies = []
             dates = []
+            load_averages = []
 
             for data in results:
                 file_name = Path(data["file"]).name
@@ -1161,6 +1244,19 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
                     if "is_RT" in data["system_info"]:
                         result += f" (RT: {'Yes' if data['system_info']['is_RT'] else 'No'})"
                     result += "\n"
+
+                # Load information
+                if "load_info" in data and data["load_info"]:
+                    load_info = data["load_info"]
+                    if "load_average" in load_info and load_info["load_average"]:
+                        result += f"  Load Average: {load_info['load_average']}\n"
+                        try:
+                            load_averages.append(float(load_info["load_average"]))
+                        except ValueError:
+                            pass
+                    if "load_generators" in load_info and load_info["load_generators"]:
+                        load_names = [gen.get("name", "unknown") for gen in load_info["load_generators"]]
+                        result += f"  Load Types: {', '.join(load_names)}\n"
 
                 # Measurements - timerlat
                 if "timerlat" in data["measurements"]:
@@ -1224,6 +1320,12 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
                 result += f"  Highest mean: {max(mean_latencies):.2f} µs\n"
                 result += f"  Average mean: {sum(mean_latencies) / len(mean_latencies):.2f} µs\n"
 
+            if load_averages:
+                result += f"\nLoad Averages:\n"
+                result += f"  Lowest load avg: {min(load_averages):.2f}\n"
+                result += f"  Highest load avg: {max(load_averages):.2f}\n"
+                result += f"  Average load avg: {sum(load_averages) / len(load_averages):.2f}\n"
+
             return [TextContent(type="text", text=result)]
 
         except Exception as e:
@@ -1240,6 +1342,9 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
         date_to = arguments.get("date_to")
         min_duration = arguments.get("min_duration_minutes")
         max_threshold = arguments.get("max_latency_threshold")
+        load_type = arguments.get("load_type")
+        min_load_avg = arguments.get("min_load_average")
+        max_load_avg = arguments.get("max_load_average")
 
         try:
             path = Path(directory)
@@ -1303,6 +1408,35 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
 
                         if max_lat is None or max_lat > max_threshold:
                             continue
+
+                    # Load filtering
+                    if load_type or min_load_avg or max_load_avg:
+                        load_info = data.get("load_info", {})
+
+                        # Filter by load type
+                        if load_type:
+                            load_generators = load_info.get("load_generators", [])
+                            has_load_type = any(
+                                load_type.lower() in gen.get("name", "").lower()
+                                for gen in load_generators
+                            )
+                            if not has_load_type:
+                                continue
+
+                        # Filter by load average
+                        if min_load_avg or max_load_avg:
+                            load_avg_str = load_info.get("load_average")
+                            if load_avg_str:
+                                try:
+                                    load_avg = float(load_avg_str)
+                                    if min_load_avg and load_avg < min_load_avg:
+                                        continue
+                                    if max_load_avg and load_avg > max_load_avg:
+                                        continue
+                                except ValueError:
+                                    continue
+                            else:
+                                continue
 
                     filtered.append(data)
 
@@ -1810,6 +1944,50 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
             return [TextContent(
                 type="text",
                 text=f"Error extracting per-CPU stats: {str(e)}"
+            )]
+
+    elif name == "get_load_info":
+        file_path = arguments["file_path"]
+
+        try:
+            path = Path(file_path)
+            if not path.exists():
+                return [TextContent(
+                    type="text",
+                    text=f"Error: File '{file_path}' does not exist"
+                )]
+
+            # Extract load information
+            load_info = extract_load_info(file_path)
+
+            result = f"Load Configuration from: {path.name}\n"
+            result += "=" * 60 + "\n\n"
+
+            if load_info["load_average"]:
+                result += f"Load Average: {load_info['load_average']}\n"
+            if load_info["load_cpus"]:
+                result += f"Load CPUs: {load_info['load_cpus']}\n"
+            result += f"Number of Load Types: {load_info['num_load_types']}\n\n"
+
+            if load_info["load_generators"]:
+                result += "Load Generators:\n"
+                for gen in load_info["load_generators"]:
+                    result += f"  - {gen['name']}: {gen['job_instances']} instance(s)\n"
+                    if gen.get('command'):
+                        # Truncate long commands
+                        cmd = gen['command']
+                        if len(cmd) > 80:
+                            cmd = cmd[:77] + "..."
+                        result += f"    Command: {cmd}\n"
+            else:
+                result += "No load generators found\n"
+
+            return [TextContent(type="text", text=result)]
+
+        except Exception as e:
+            return [TextContent(
+                type="text",
+                text=f"Error extracting load info: {str(e)}"
             )]
 
     else:

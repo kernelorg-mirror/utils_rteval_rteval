@@ -53,6 +53,9 @@ sudo dnf install python3-mcp python3-mcp+cli python3-lxml
 - **get_percentiles**: Calculate latency percentiles (P50, P95, P99, P99.9, etc.)
 - **get_per_cpu_stats**: Get per-CPU latency statistics and identify problematic cores
 
+### Load Analysis
+- **get_load_info**: Extract load configuration and metrics from an rteval result file
+
 ## Usage
 
 ### Testing the Server Directly
@@ -129,6 +132,231 @@ Which CPUs have the most variable latency?
 mcp dev server.py
 ```
 
+## Complete Tool Usage Guide
+
+This section shows both the technical tool call format and natural language queries users can ask.
+
+### list_results
+
+**Tool Call:**
+```python
+list_results(directory=".", pattern="*.xml")
+```
+
+**User Asks:**
+- "List all rteval results"
+- "Show me rteval result files in ~/src/rteval"
+- "What rteval results are in the current directory?"
+
+---
+
+### parse_result
+
+**Tool Call:**
+```python
+parse_result(file_path="rteval-20260724-1/summary.xml")
+```
+
+**User Asks:**
+- "Parse rteval-20260724-1"
+- "Show me the results from rteval-20260724-1"
+- "What's in the rteval-20260724-1 summary?"
+- "Analyze rteval-20260724-1/summary.xml"
+
+---
+
+### compare_results
+
+**Tool Call:**
+```python
+compare_results(file1="rteval-20260724-1/summary.xml",
+                file2="rteval-20260724-2/summary.xml")
+```
+
+**User Asks:**
+- "Compare rteval-20260724-1 and rteval-20260724-2"
+- "What's the difference between rteval-20260724-1 and rteval-20260724-2?"
+- "Show me a comparison of these two rteval runs"
+
+---
+
+### batch_analysis
+
+**Tool Call:**
+```python
+batch_analysis(directory=".", pattern="*.xml", recursive=False)
+```
+
+**User Asks:**
+- "Analyze all rteval results"
+- "Show me aggregate statistics for all rteval runs"
+- "What's the average max latency across all results?"
+- "Summarize all rteval results"
+- "What's the range of load averages across all runs?"
+
+---
+
+### filter_results
+
+**Tool Call:**
+```python
+filter_results(directory=".",
+               kernel_pattern="7.0",
+               is_rt=True,
+               date_from="2026-06-01",
+               date_to="2026-07-31",
+               min_duration_minutes=5,
+               max_latency_threshold=6000,
+               load_type="hackbench",
+               min_load_average=1000,
+               max_load_average=1500)
+```
+
+**User Asks:**
+- "Show me rteval results with kernel 7.0"
+- "Find rteval results from June 2026"
+- "Show results with max latency under 6000 microseconds"
+- "Filter rteval results by RT kernel"
+- "Show me results that used hackbench"
+- "Find runs with load average between 1000 and 1500"
+- "Which results ran with kcompile load?"
+- "Show me RT kernel runs with stress-ng that had low latency"
+
+---
+
+### find_best_worst
+
+**Tool Call:**
+```python
+find_best_worst(directory=".", metric="maximum", count=5)
+```
+
+**User Asks:**
+- "Find the 3 best and worst rteval runs by maximum latency"
+- "Which rteval runs had the lowest mean latency?"
+- "Show me the 5 best and worst runs"
+- "What were the top performing runs by median latency?"
+
+---
+
+### compare_to_baseline
+
+**Tool Call:**
+```python
+compare_to_baseline(baseline_file="rteval-20260605-1/summary.xml",
+                    directory=".",
+                    threshold_percent=10)
+```
+
+**User Asks:**
+- "Compare all rteval results to rteval-20260605-1/summary.xml"
+- "Check for regressions against the baseline"
+- "Which runs regressed compared to rteval-20260605-1?"
+- "Are there any performance regressions with 5% threshold?"
+
+---
+
+### list_logs
+
+**Tool Call:**
+```python
+list_logs(result_dir="rteval-20260724-1")
+```
+
+**User Asks:**
+- "List logs in rteval-20260724-1"
+- "What log files are available for rteval-20260724-1?"
+- "Show me the logs from this run"
+
+---
+
+### read_log
+
+**Tool Call:**
+```python
+read_log(log_path="rteval-20260724-1/logs/timerlat.stdout",
+         tail=100,
+         grep="error")
+```
+
+**User Asks:**
+- "Show me the last 100 lines of the timerlat log"
+- "Read the timerlat stdout from rteval-20260724-1"
+- "Search for 'error' in the timerlat log"
+- "Show me the beginning of the kcompile log"
+
+---
+
+### extract_histogram
+
+**Tool Call:**
+```python
+extract_histogram(file_path="rteval-20260714-1/summary.xml",
+                  include_per_cpu=True)
+```
+
+**User Asks:**
+- "Extract histogram data from rteval-20260714-1"
+- "Show me the latency distribution for rteval-20260714-1"
+- "What does the histogram look like?"
+- "Show me per-CPU histogram data"
+
+---
+
+### get_percentiles
+
+**Tool Call:**
+```python
+get_percentiles(file_path="rteval-20260714-1/summary.xml",
+                percentiles=[50, 90, 95, 99, 99.9, 99.99],
+                per_cpu=False)
+```
+
+**User Asks:**
+- "Calculate P99 and P99.9 percentiles for rteval-20260714-1"
+- "Show me percentiles for each CPU in rteval-20260714-1"
+- "What percentage of samples had latency under 10 microseconds?"
+- "What's the P95 latency?"
+- "Show me per-CPU percentiles"
+
+---
+
+### get_per_cpu_stats
+
+**Tool Call:**
+```python
+get_per_cpu_stats(file_path="rteval-20260714-1/summary.xml",
+                  sort_by="maximum",
+                  show_top_n=5,
+                  highlight_threshold=1000)
+```
+
+**User Asks:**
+- "Show me per-CPU statistics for rteval-20260714-1"
+- "Which CPUs had the worst maximum latency?"
+- "Show the top 5 CPUs sorted by mean latency"
+- "Highlight CPUs with max latency above 1000 microseconds"
+- "Which CPUs have the most variable latency?"
+- "Which CPU had the worst latency spike?"
+
+---
+
+### get_load_info
+
+**Tool Call:**
+```python
+get_load_info(file_path="rteval-20260724-1/summary.xml")
+```
+
+**User Asks:**
+- "What loads were running in rteval-20260724-1?"
+- "Show me the load configuration for rteval-20260724-1"
+- "What was the load average in this run?"
+- "What load generators were used?"
+- "Show me the load setup for this test"
+
+---
+
 ## Features in Detail
 
 ### filter_results
@@ -138,8 +366,14 @@ Filter rteval results by multiple criteria:
 - **date_from/date_to**: Date range filter (YYYY-MM-DD format)
 - **min_duration_minutes**: Minimum test duration
 - **max_latency_threshold**: Maximum acceptable latency in µs
+- **load_type**: Filter by load generator type (e.g., "kcompile", "hackbench", "stressng")
+- **min_load_average**: Minimum load average threshold
+- **max_load_average**: Maximum load average threshold
 
-Example: Find all RT kernel runs from June 2026 with max latency under 4000 µs
+Examples:
+- Find all RT kernel runs from June 2026 with max latency under 4000 µs
+- Find runs with hackbench load and load average between 1000 and 1500
+- Show runs with stress-ng that had low latency on RT kernels
 
 ### find_best_worst
 Identify optimal and poorest performing runs:
@@ -164,9 +398,10 @@ Aggregate statistics across multiple runs:
 - Total files analyzed
 - Date range coverage
 - Min/max/average latencies across all runs
-- Individual result summaries
+- Min/max/average load averages across all runs
+- Individual result summaries with load information
 
-Useful for understanding performance trends over time.
+Useful for understanding performance trends over time and correlating load with latency.
 
 ### extract_histogram
 Extract raw histogram data from rteval results:
