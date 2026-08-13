@@ -1,6 +1,6 @@
 {
   "manifest_version": "0.2",
-  "name": "rteval",
+  "name": "rteval-mcp",
   "version": "0.1.0",
   "description": "rteval test results analysis - query and compare real-time evaluation test results",
   "author": {

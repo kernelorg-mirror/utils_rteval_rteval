@@ -71,7 +71,7 @@ The server is configured as a Claude Code plugin. After installation:
 1. The server is registered in `~/.claude/plugins/installed_plugins.json`
 2. Enabled in `~/.claude/settings.json`
 3. Restart Claude Code to load the plugin
-4. Tools will be available with the prefix: `mcp__plugin_rteval-mcp_rteval__`
+4. Tools will be available with the prefix: `mcp__rteval-mcp__`
 
 Example queries:
 ```
