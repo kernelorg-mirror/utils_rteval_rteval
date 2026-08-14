@@ -69,10 +69,27 @@ sudo dnf install python3-mcp python3-mcp+cli python3-lxml
 
 ## Usage
 
-### Testing the Server Directly
+### Testing the Server
+
+The MCP server includes a test suite to verify functionality:
 
 ```bash
-python3 test_tools.py
+cd mcp-server
+
+# Run all tests
+make test
+
+# Run individual test suites
+make test-new-tools      # Query/filter tools
+make test-integration    # MCP integration tests
+make test-histogram      # Histogram extraction
+make test-per-cpu        # Per-CPU statistics
+
+# Show available targets
+make help
+
+# Clean Python cache files
+make clean
 ```
 
 ### Using with Claude Code
