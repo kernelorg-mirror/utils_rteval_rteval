@@ -1,10 +1,7 @@
 {
   "mcpServers": {
     "rteval-mcp": {
-      "command": "python3",
-      "args": [
-        "/home/jkacur/src/rteval/mcp-server/server.py"
-      ]
+      "command": "./rteval_mcp/rteval-mcp-server"
     }
   }
 }

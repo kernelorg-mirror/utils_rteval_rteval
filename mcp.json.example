@@ -1,0 +1,11 @@
+{
+  "_comment": "Example MCP server configuration for rteval-mcp",
+  "_installation": "When rteval is installed system-wide, this file should be copied to ~/.config/mcp/mcp.json or merged with existing MCP configuration",
+  "_usage": "The rteval-mcp-server command will be installed to /usr/bin or a similar system path",
+
+  "mcpServers": {
+    "rteval-mcp": {
+      "command": "rteval-mcp-server"
+    }
+  }
+}
