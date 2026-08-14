@@ -12,9 +12,9 @@ import sys
 import asyncio
 from pathlib import Path
 
-# Add parent directory to path to import server module
+# Add parent directory to path to import rteval_server module
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from server import extract_rteval_data
+from rteval_server import extract_rteval_data
 
 
 async def test_find_best_worst():

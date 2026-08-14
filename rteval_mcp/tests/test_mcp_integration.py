@@ -16,9 +16,9 @@ import sys
 import asyncio
 from pathlib import Path
 
-# Add parent directory to path to import server module
+# Add parent directory to path to import rteval_server module
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from server import call_tool, list_tools
+from rteval_server import call_tool, list_tools
 
 
 def find_test_data():

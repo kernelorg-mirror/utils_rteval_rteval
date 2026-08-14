@@ -13,9 +13,9 @@ Test script for histogram extraction and percentile calculation.
 import sys
 from pathlib import Path
 
-# Add parent directory to path to import server module
+# Add parent directory to path to import rteval_server module
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from server import extract_histogram_data, calculate_percentiles
+from rteval_server import extract_histogram_data, calculate_percentiles
 
 # Find test file relative to script location
 # From tests/ -> mcp-server/ -> rteval/

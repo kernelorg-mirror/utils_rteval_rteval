@@ -74,7 +74,7 @@ sudo dnf install python3-mcp python3-mcp+cli python3-lxml
 The MCP server includes a test suite to verify functionality:
 
 ```bash
-cd mcp-server
+cd rteval_mcp
 
 # Run all tests
 make test
@@ -157,7 +157,7 @@ Which CPUs have the most variable latency?
 ### Using with MCP Inspector
 
 ```bash
-mcp dev server.py
+mcp dev rteval-mcp-server
 ```
 
 ## Complete Tool Usage Guide
