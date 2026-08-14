@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+#   rteval MCP Server tests - integration tests
+#
+#   Copyright 2026   John Kacur <jkacur@redhat.com>
+#
 """Integration tests for rteval MCP server.
 
 Tests the MCP server tools through the actual MCP interface,

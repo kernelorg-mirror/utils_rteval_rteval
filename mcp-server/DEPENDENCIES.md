@@ -1,3 +1,11 @@
+<!--
+SPDX-License-Identifier: GPL-2.0-or-later
+
+rteval MCP Server - Dependencies
+
+Copyright 2026 John Kacur <jkacur@redhat.com>
+-->
+
 # Dependencies
 
 ## Fedora Packages

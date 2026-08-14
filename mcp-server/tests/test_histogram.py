@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+#   rteval MCP Server tests - histogram and percentile tools
+#
+#   Copyright 2026   John Kacur <jkacur@redhat.com>
+#
 """
 Test script for histogram extraction and percentile calculation.
 """

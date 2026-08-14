@@ -1,4 +1,11 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# SPDX-License-Identifier: GPL-2.0-or-later
+#
+#   rteval MCP Server - tools for analyzing rteval results
+#
+#   Copyright 2026   John Kacur <jkacur@redhat.com>
+#
 """
 rteval MCP Server
 
