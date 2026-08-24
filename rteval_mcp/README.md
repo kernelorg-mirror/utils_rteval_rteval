@@ -94,12 +94,22 @@ make clean
 
 ### Using with Claude Code
 
-The server is configured as a Claude Code plugin. After installation:
+Installing the package (or checking out the source) makes the server
+available, but you must register it with your MCP client once. See
+[ENABLING.md](ENABLING.md) for the full instructions. The short version:
 
-1. The server is registered in `~/.claude/plugins/installed_plugins.json`
-2. Enabled in `~/.claude/settings.json`
-3. Restart Claude Code to load the plugin
-4. Tools will be available with the prefix: `mcp__rteval-mcp__`
+- **Installed from the `rteval-mcp` package:**
+
+      claude mcp add rteval-mcp -- rteval-mcp-server
+
+- **From a source checkout**, the repository's `.mcp.json` already runs
+  `python3 -m rteval_mcp`, so no install is needed.
+
+- **As a Claude Code plugin**, the server is registered in
+  `~/.claude/plugins/installed_plugins.json` and enabled in
+  `~/.claude/settings.json`; restart Claude Code to load it.
+
+Either way, tools appear with the prefix `mcp__rteval-mcp__`.
 
 Example queries:
 ```

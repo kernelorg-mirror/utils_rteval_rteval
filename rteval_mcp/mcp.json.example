@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "rteval-mcp": {
+      "command": "rteval-mcp-server",
+      "args": []
+    }
+  }
+}
