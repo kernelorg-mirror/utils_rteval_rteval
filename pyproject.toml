@@ -23,6 +23,7 @@ dependencies = [
     "lxml",
     "requests",
 ]
+optional-dependencies = {mcp = ["mcp"]}
 authors = [
     {name = "Clark Williams", email = "williams@redhat.com"},
     {name = "David Sommerseth", email = "davids@redhat.com"},
@@ -31,6 +32,9 @@ authors = [
 maintainers = [
     {name = "John Kacur", email = "jkacur@redhat.com"},
 ]
+
+[project.scripts]
+rteval-mcp-server = "rteval_mcp.__main__:main"
 
 [project.urls]
 Homepage = "https://git.kernel.org/pub/scm/utils/rteval/rteval.git"
@@ -41,7 +45,8 @@ packages = [
     "rteval.modules",
     "rteval.modules.loads",
     "rteval.modules.measurement",
-    "rteval.sysinfo"
+    "rteval.sysinfo",
+    "rteval_mcp"
 ]
 
 [tool.setuptools.dynamic]
@@ -53,6 +58,7 @@ rteval = "rteval"
 "rteval.modules.loads" = "rteval/modules/loads"
 "rteval.modules.measurement" = "rteval/modules/measurement"
 "rteval.sysinfo" = "rteval/sysinfo"
+rteval_mcp = "rteval_mcp"
 
 [tool.setuptools.package-data]
 rteval = ["*.xsl", "rteval.conf"]

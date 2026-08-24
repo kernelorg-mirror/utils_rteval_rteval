@@ -11,7 +11,7 @@
     "type": "python",
     "entry_point": "rteval-mcp-server",
     "mcp_config": {
-      "command": "./rteval_mcp/rteval-mcp-server",
+      "command": "rteval-mcp-server",
       "args": []
     }
   }

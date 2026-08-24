@@ -1,7 +1,8 @@
 {
   "mcpServers": {
     "rteval-mcp": {
-      "command": "./rteval_mcp/rteval-mcp-server"
+      "command": "python3",
+      "args": ["-m", "rteval_mcp"]
     }
   }
 }

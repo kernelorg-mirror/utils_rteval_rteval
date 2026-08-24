@@ -10,7 +10,7 @@
   "keywords": ["rteval", "real-time", "latency", "testing", "timerlat", "cyclictest"],
   "mcpServers": {
     "rteval-mcp": {
-      "command": "./rteval_mcp/rteval-mcp-server",
+      "command": "rteval-mcp-server",
       "args": [],
       "env": {}
     }
