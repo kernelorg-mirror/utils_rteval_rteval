@@ -5,10 +5,32 @@ import os.path
 import time
 import subprocess
 import signal
+import sys
 from rteval.modules.loads import CommandLineLoad
 from rteval.Log import Log
 from rteval.systopology import SysTopology
 from rteval.cpulist_utils import CpuList
+
+def get_valid_stressors():
+    """Query stress-ng for list of valid stressor names."""
+    try:
+        result = subprocess.run(['stress-ng', '--stressors'],
+                                capture_output=True, text=True, check=True)
+        return result.stdout.strip().split()
+    except FileNotFoundError:
+        print("stress-ng is not installed. Please install the stress-ng package.")
+        sys.exit(1)
+    except subprocess.CalledProcessError as e:
+        print(f"Failed to query stress-ng stressors: {e}")
+        sys.exit(1)
+
+def validate_stressor(stressor_name):
+    """Validate a single stressor name against stress-ng's available stressors."""
+    valid = get_valid_stressors()
+    if stressor_name not in valid:
+        print(f"Invalid stress-ng stressor: '{stressor_name}'. "
+              f"Run 'stress-ng --stressors' to see valid options.")
+        sys.exit(1)
 
 class Stressng(CommandLineLoad):
     " This class creates a load module that runs stress-ng "
@@ -51,6 +73,7 @@ class Stressng(CommandLineLoad):
 
         # stress-ng is only run if the user specifies an stressor
         self.args = ['stress-ng']
+        validate_stressor(self.cfg.stressor)
         self.args.append(f'--{str(self.cfg.stressor)}')
         if self.cfg.workers is not None:
             self.args.append(self.cfg.workers) #default is 0
