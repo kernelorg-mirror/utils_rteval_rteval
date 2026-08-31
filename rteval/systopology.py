@@ -299,6 +299,23 @@ def parse_numa_node_list(node_str, flag_name="--numa-nodes"):
     return sorted(nodes)
 
 
+def get_cpus_for_numa_nodes(node_list):
+    """
+    Expand a list of NUMA node integers into the CPUs that belong to them.
+
+    :param node_list: List of node integers (e.g. [0, 1])
+    :return: Sorted list of unique CPU integers (empty if node_list is empty)
+    """
+    if not node_list:
+        return []
+
+    st = SysTopology()
+    cpulist = []
+    for node in node_list:
+        cpulist.extend(st.getcpus(node))
+    return sorted(set(cpulist))
+
+
 def parse_cpulist_from_config(cpulist, run_on_isolcpus=False):
     """
     Generates a cpulist based on --*-cpulist argument given by user
