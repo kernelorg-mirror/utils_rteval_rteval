@@ -31,7 +31,7 @@ from rteval.modules.loads import LoadModules
 from rteval.modules.measurement import MeasurementModules
 from rteval import cpupower
 from rteval.version import RTEVAL_VERSION
-from rteval.systopology import SysTopology, parse_cpulist_from_config, validate_housekeeping_cpus, validate_core_sharing
+from rteval.systopology import SysTopology, parse_cpulist_from_config, validate_housekeeping_cpus, validate_core_sharing, parse_numa_node_list
 from rteval.modules.loads.kcompile import ModuleParameters
 from rteval.cpulist_utils import CpuList, is_relative, collapse_cpulist
 from rteval.sysinfo import containercheck
@@ -412,6 +412,17 @@ if __name__ == '__main__':
 
         ldcfg = config.GetSection('loads')
         msrcfg = config.GetSection('measurement')
+
+        # Parse NUMA node placement flags into lists of integers, validating
+        # syntax and that each node exists on the system.
+        measurement_numa_nodes = parse_numa_node_list(
+            msrcfg.numa_nodes, "--measurement-numa-nodes")
+        loads_numa_nodes = parse_numa_node_list(
+            ldcfg.numa_nodes, "--loads-numa-nodes")
+        if measurement_numa_nodes:
+            logger.log(Log.DEBUG, f"measurement NUMA nodes: {collapse_cpulist(measurement_numa_nodes)}")
+        if loads_numa_nodes:
+            logger.log(Log.DEBUG, f"loads NUMA nodes: {collapse_cpulist(loads_numa_nodes)}")
 
         # Validate --housekeeping-isolated usage
         if rtevcfg.housekeeping_isolated:

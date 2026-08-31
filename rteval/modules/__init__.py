@@ -303,6 +303,11 @@ reference from the first import"""
                             default="",
                             help=f'CPU list where {self.__modtype} modules will run',
                             metavar='CPULIST')
+        grparser.add_argument(f'--{self.__modtype}-numa-nodes',
+                            dest=f'{self.__modtype}___numa_nodes', action='store',
+                            default="",
+                            help=f'NUMA node(s) to run {self.__modtype} modules on',
+                            metavar='NODES')
 
         # Set up options for measurement modules only
         if self.__modtype == 'measurement':

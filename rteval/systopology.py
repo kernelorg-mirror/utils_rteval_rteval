@@ -9,7 +9,7 @@
 import os
 import os.path
 import glob
-from rteval.cpulist_utils import CpuList, sysread, is_relative, expand_relative_cpulist, collapse_cpulist
+from rteval.cpulist_utils import CpuList, sysread, is_relative, expand_relative_cpulist, collapse_cpulist, expand_cpulist
 
 def cpuinfo():
     ''' return a dictionary of cpu keys with various cpu information '''
@@ -261,6 +261,42 @@ def validate_housekeeping_cpus(housekeeping_cpulist):
         )
 
     return sorted(housekeeping)
+
+
+def parse_numa_node_list(node_str, flag_name="--numa-nodes"):
+    """
+    Parse a NUMA node specification string into a sorted list of integers.
+
+    Accepts the same syntax as a cpulist ("0", "0-1", "0,2-3") and validates
+    that every named node exists on the system.
+
+    :param node_str: Value of a --*-numa-nodes argument
+    :param flag_name: Flag name to quote in error messages
+    :return: Sorted list of unique node integers (empty if node_str is empty)
+    :raises RuntimeError: on malformed syntax or a node that does not exist
+    """
+    if not node_str:
+        return []
+
+    try:
+        nodes = expand_cpulist(node_str)
+    except ValueError as err:
+        raise RuntimeError(f"{flag_name} '{node_str}': malformed node list") from err
+
+    # expand_cpulist silently turns a reversed range (e.g. "3-1") into an empty
+    # list; a non-empty spec that expands to nothing is malformed.
+    if not nodes:
+        raise RuntimeError(f"{flag_name} '{node_str}': malformed node list")
+
+    available = SysTopology().getnodes()
+    missing = sorted(n for n in nodes if n not in available)
+    if missing:
+        avail_str = collapse_cpulist(available) if available else "none"
+        raise RuntimeError(
+            f"{flag_name}: node(s) {collapse_cpulist(missing)} do not exist on this "
+            f"system (available nodes: {avail_str})")
+
+    return sorted(nodes)
 
 
 def parse_cpulist_from_config(cpulist, run_on_isolcpus=False):
