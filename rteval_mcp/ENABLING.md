@@ -19,7 +19,14 @@ This provides:
 
 Run this once:
 
-    claude mcp add rteval-mcp -- rteval-mcp-server
+    claude mcp add --scope user rteval-mcp -- rteval-mcp-server
+
+The `--scope user` flag registers the server in your user configuration so it
+is available from any directory. Without it, `claude mcp add` defaults to
+`local` scope, which ties the server to the directory you happened to run the
+command from — the tools would then only appear when Claude Code is launched
+from that one directory. Since `rteval-mcp-server` is on your `PATH` after
+install, user scope is what you want.
 
 The tools then appear with the `mcp__rteval-mcp__` prefix. There is nothing
 to keep running: Claude Code spawns `rteval-mcp-server` when it needs it and
