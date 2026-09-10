@@ -3,12 +3,16 @@
 
 set -e
 
-# Detect rteval-cmd location (works from root dir or local/ dir)
+# Detect rteval-cmd location. This script lives in tests/cpusets/, so the
+# repository root is two levels up, but also handle being run from the repo
+# root or an adjacent directory.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ -x "$SCRIPT_DIR/rteval-cmd" ]; then
     RTEVAL_CMD="$SCRIPT_DIR/rteval-cmd"
 elif [ -x "$SCRIPT_DIR/../rteval-cmd" ]; then
     RTEVAL_CMD="$SCRIPT_DIR/../rteval-cmd"
+elif [ -x "$SCRIPT_DIR/../../rteval-cmd" ]; then
+    RTEVAL_CMD="$SCRIPT_DIR/../../rteval-cmd"
 else
     echo "ERROR: Cannot find rteval-cmd"
     exit 1
