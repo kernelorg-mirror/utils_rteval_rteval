@@ -72,30 +72,30 @@ check "timerlat duration" \
 
 check "timerlat command, with --measurement-cpulist" \
   "--noload -d 1 --measurement-cpulist=0-1" 0 \
-  'Command: rtla timerlat hist -p100 -P f:95 -u -c0-1'
+  'Command: rtla timerlat hist -p 100 -P f:95 -u -c 0-1 -E 3500 --no-aa --dma-latency=0'
 
 check "timerlat command, with --measurement-run-on-isolcpus" \
   "--noload -d 1 --measurement-run-on-isolcpus" 0 \
-  'Command: rtla timerlat hist -p100 -P f:95 -u'
+  'Command: rtla timerlat hist -p 100 -P f:95 -u -c [0-9|-]+ -E 3500 --no-aa --dma-latency=0'
 
 check "timerlat command, with --timerlat-interval" \
   "--noload -d 1 --timerlat-interval 2000" 0 \
-  'Command: rtla timerlat hist -p2000 -P f:95'
+  'Command: rtla timerlat hist -p 2000 -P f:95 -u -c [0-9|-]+ -E 3500 --no-aa --dma-latency=0'
 
 check "timerlat command, with --timerlat-priority" \
   "--noload -d 1 --timerlat-priority 80" 0 \
-  'Command: rtla timerlat hist -p100 -P f:80 -u'
+  'Command: rtla timerlat hist -p 100 -P f:80 -u -c [0-9|-]+ -E 3500 --no-aa --dma-latency=0'
 
 check "timerlat command, with --timerlat-buckets" \
   "--noload -d 1 --timerlat-buckets 4000" 0 \
-  'Command: rtla timerlat hist -p100 -P f:95 -u -c[0-9|-]+ -E4000'
+  'Command: rtla timerlat hist -p 100 -P f:95 -u -c [0-9|-]+ -E 4000 --no-aa --dma-latency=0'
 
 check "timerlat command, with --timerlat-stoptrace" \
   "--noload -d 1 --timerlat-stoptrace 1" any \
-  'Command: rtla timerlat hist -p100 -P f:95 -u -c[0-9|-]+ -E3500 --no-summary --no-aa --dma-latency=0 -T1'
+  'Command: rtla timerlat hist -p 100 -P f:95 -u -c [0-9|-]+ -E 3500 --dma-latency=0 -T 1'
 
 check "timerlat command, with --timerlat-trace" \
   "--noload -d 1 --timerlat-stoptrace 1 --timerlat-trace trace.txt" any \
-  'Command: rtla timerlat hist -p100 -P f:95 -u -c[0-9|-]+ -E3500 --no-summary --no-aa --dma-latency=0 -T1 -t=trace.txt'
+  'Command: rtla timerlat hist -p 100 -P f:95 -u -c [0-9|-]+ -E 3500 --dma-latency=0 -T 1 -t trace.txt'
 
 test_end
