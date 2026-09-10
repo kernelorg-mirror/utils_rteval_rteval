@@ -149,7 +149,10 @@ EOF
             ;;
         mixed_corruption)
             # This scenario exits 0 but produces bad data
-            if grep -q "Error parsing cyclictest bucket data" "$log_file"; then
+            if grep -q "Skipping incomplete bucket data" "$log_file" || \
+               grep -q "Skipping incomplete histogram line" "$log_file" || \
+               grep -q "unexpected output" "$log_file" || \
+               grep -q "Error parsing max latencies" "$log_file"; then
                 echo -e "${GREEN}✓ Mock cyclictest was called (parsing errors detected)${NC}"
                 mock_called=true
             fi
@@ -161,13 +164,19 @@ EOF
         result="FAIL"
     fi
 
-    # Check for warning about parsing errors
-    if grep -q "Error parsing cyclictest bucket data" "$log_file" || \
+    # Check that the module noticed and handled the malformed data. The
+    # messages vary by where the bad data is: a non-numeric bucket value is
+    # skipped ("Skipping incomplete bucket data"), a non-numeric row index is
+    # logged as "unexpected output", a short row as "Skipping incomplete
+    # histogram line", and a bad "# Max Latencies:" header as "Error parsing
+    # max latencies".
+    if grep -q "Skipping incomplete bucket data" "$log_file" || \
+       grep -q "Skipping incomplete histogram line" "$log_file" || \
        grep -q "Error parsing max latencies" "$log_file" || \
        grep -q "unexpected output" "$log_file"; then
-        echo -e "${GREEN}✓ Logged warnings about malformed data${NC}"
+        echo -e "${GREEN}✓ Logged handling of malformed data${NC}"
     else
-        echo -e "${YELLOW}? No warnings about malformed data found${NC}"
+        echo -e "${YELLOW}? No handling of malformed data found${NC}"
     fi
 
     # Check for SIGINT handling (if applicable)
