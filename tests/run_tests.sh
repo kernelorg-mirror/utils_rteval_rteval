@@ -50,28 +50,20 @@ run_test() {
     echo ""
 }
 
-# Find and run all test files in tests/
+# Find and run all Python test files in tests/
+# Discovered dynamically so new test files are picked up automatically:
+#   - tests/test_*.py          (unittest-based and script-style tests)
+#   - tests/unittest-legacy.py (legacy custom harness, does not match test_*.py)
 if [ -d "tests" ]; then
-    # Run test_measurement_module_selection.py
-    if [ -f "tests/test_measurement_module_selection.py" ]; then
-        run_test "tests/test_measurement_module_selection.py"
+    shopt -s nullglob
+    test_files=(tests/test_*.py tests/unittest-legacy.py)
+    if [ ${#test_files[@]} -eq 0 ]; then
+        echo -e "${RED}Error: no test files found in tests/${NC}"
+        exit 1
     fi
-
-    # Run test_core_sharing_validation.py
-    if [ -f "tests/test_core_sharing_validation.py" ]; then
-        run_test "tests/test_core_sharing_validation.py"
-    fi
-
-    # Run test_cpusetmanager.py (non-root tests only)
-    if [ -f "tests/test_cpusetmanager.py" ]; then
-        run_test "tests/test_cpusetmanager.py"
-    fi
-
-    # Add more tests here as they are created
-    # Example:
-    # if [ -f "tests/test_another_feature.py" ]; then
-    #     run_test "tests/test_another_feature.py"
-    # fi
+    for test_file in "${test_files[@]}"; do
+        run_test "$test_file"
+    done
 else
     echo -e "${RED}Error: tests/ directory not found${NC}"
     exit 1

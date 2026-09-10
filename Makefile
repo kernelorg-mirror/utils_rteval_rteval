@@ -18,6 +18,8 @@ KLOAD	:=	$(LOADDIR)/linux-6.17.7.tar.xz
 BLOAD	:=	$(LOADDIR)/dbench-4.0.tar.gz
 LOADS	:=	$(KLOAD) $(BLOAD)
 
+.DEFAULT_GOAL := help
+
 e2e-tests: rteval-cmd
 	PYTHON="$(PYTHON)" RTEVAL="$(HERE)/rteval-cmd" RTEVAL_PKG="$(HERE)" prove -o -f -v tests/e2e/
 
@@ -70,15 +72,17 @@ mcp-tests:
 tests: unit-tests
 
 test-all:
-	@echo "Running ALL tests (including root-required tests)..."
-	@echo ""
 	@if [ "$$(id -u)" != "0" ]; then \
 		echo "ERROR: test-all must be run as root"; \
 		echo "Usage: sudo make test-all"; \
 		exit 1; \
 	fi
-	@echo "Running unit tests (including root-required)..."
-	$(PYTHON) -m unittest discover -s tests -p "test_*.py" -v
+	@echo "Running ALL tests (unit + e2e + regression + cpuset)..."
+	@echo ""
+	$(MAKE) unit-tests
+	$(MAKE) e2e-tests
+	$(MAKE) regression-tests
+	$(MAKE) cpuset-tests
 
 clean:
 	rm -f *~ rteval/*~ rteval/*.py[co] *.tar.bz2 *.tar.gz doc/*~
@@ -139,7 +143,8 @@ help:
 	@echo ""
 	@echo "rteval Makefile targets:"
 	@echo ""
-	@echo "        runit:            do a short testrun locally [default]"
+	@echo "        help:             show this help message [default]"
+	@echo "        runit:            do a short testrun locally"
 	@echo "        tests:            run unit tests (alias for unit-tests)"
 	@echo "        unit-tests:       run unit tests"
 	@echo "        mcp-tests:        run MCP server tests (requires rteval result files)"
@@ -165,4 +170,4 @@ tags:
 cleantags:
 	rm -f tags
 
-.PHONY: tests unit-tests mcp-tests test-all e2e-tests regression-tests cpuset-tests uninstall
+.PHONY: help tests unit-tests mcp-tests test-all e2e-tests regression-tests cpuset-tests uninstall
