@@ -118,3 +118,9 @@ if __name__ == '__main__':
     tests.RunTests()
     tests.PrintTestSummary()
 
+    # Exit non-zero if any module failed to import, failed its test, or was
+    # missing a unit_test() function, so the caller can detect failures.
+    if tests.mod_impfail or tests.mod_testfail or tests.mod_testmiss:
+        sys.exit(1)
+    sys.exit(0)
+

@@ -15,6 +15,14 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m' # No Color
 
+# Some unit tests (e.g. the DMI sysinfo test) require root privileges,
+# which matches how rteval itself is normally run.
+if [ "$(id -u)" != "0" ]; then
+    echo -e "${RED}ERROR: unit tests must be run as root${NC}"
+    echo "Usage: sudo make tests   (or: sudo make unit-tests)"
+    exit 1
+fi
+
 # Get the directory where this script is located (tests/)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Change to repository root (parent of tests/)
