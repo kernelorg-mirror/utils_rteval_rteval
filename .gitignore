@@ -10,6 +10,7 @@ tarball
 *.gz
 *.rpt
 *.xml
+*.log
 *.o
 *.swp
 Makefile.in
