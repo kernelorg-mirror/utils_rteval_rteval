@@ -238,10 +238,10 @@ test_same_cpus_no_housekeeping() {
         all_good=false
     fi
 
-    if check_cpuset_partition "rteval_measurement" "member"; then
-        print_info "Partition type is 'member': OK"
+    if check_cpuset_partition "rteval_measurement" "isolated"; then
+        print_info "Partition type is 'isolated': OK"
     else
-        print_fail "Partition type is not 'member'"
+        print_fail "Partition type is not 'isolated'"
         all_good=false
     fi
 
@@ -305,10 +305,10 @@ test_different_cpus_no_housekeeping() {
         all_good=false
     fi
 
-    if check_cpuset_partition "rteval_measurement" "member"; then
-        print_info "Partition type is 'member': OK"
+    if check_cpuset_partition "rteval_measurement" "isolated"; then
+        print_info "Partition type is 'isolated': OK"
     else
-        print_fail "Partition type is not 'member'"
+        print_fail "Partition type is not 'isolated'"
         all_good=false
     fi
 
