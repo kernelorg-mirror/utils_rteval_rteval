@@ -1,7 +1,11 @@
 #!/bin/bash
 # test-cpusets.sh - Automated testing for rteval cpuset integration
-
-set -e
+#
+# Note: 'set -e' is intentionally NOT used here. This suite tracks results
+# via the TESTS_FAILED counter and decides its exit code in main(). It also
+# runs commands that are expected to fail (e.g. the isolcpus validation
+# tests) and calls 'wait' on backgrounded rteval processes that may exit
+# non-zero; under 'set -e' any of those would abort the whole run.
 
 # Detect rteval-cmd location. This script lives in tests/cpusets/, so the
 # repository root is two levels up, but also handle being run from the repo
