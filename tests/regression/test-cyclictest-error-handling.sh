@@ -9,6 +9,11 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
 MOCK_CYCLICTEST="${SCRIPT_DIR}/mock-cyclictest-partial-output.py"
+
+# Keep test artifacts (work dirs and logs) under tests/logs/ so they stay out
+# of the repo root and are easy to clean up (this script is in tests/regression/).
+LOG_DIR="${SCRIPT_DIR}/../logs"
+mkdir -p "$LOG_DIR"
 RTEVAL_MODULE="${REPO_ROOT}/rteval/modules/measurement/cyclictest.py"
 
 # Colors for output
@@ -97,7 +102,7 @@ EOF
     sudo chmod +x /usr/bin/cyclictest
 
     # Run rteval and capture output
-    local workdir="test-cyclictest-${scenario}-$$"
+    local workdir="${LOG_DIR}/test-cyclictest-${scenario}-$$"
     local log_file="${workdir}.log"
 
     # Create workdir (rteval requires it to exist)

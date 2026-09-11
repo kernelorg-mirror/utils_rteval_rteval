@@ -37,8 +37,11 @@ TESTS_FAILED=0
 # Test duration (short for quick testing)
 TEST_DURATION="10s"
 
-# Log file
-LOG_FILE="test-cpusets-$(date +%Y%m%d-%H%M%S).log"
+# Log file - keep test artifacts under tests/logs/ (this script lives in
+# tests/cpusets/) so they are out of the repo root and easy to clean up.
+LOG_DIR="$SCRIPT_DIR/../logs"
+mkdir -p "$LOG_DIR"
+LOG_FILE="$LOG_DIR/test-cpusets-$(date +%Y%m%d-%H%M%S).log"
 
 # Helper functions
 print_header() {

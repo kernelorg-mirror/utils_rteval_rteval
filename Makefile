@@ -84,9 +84,12 @@ test-all:
 	$(MAKE) regression-tests
 	$(MAKE) cpuset-tests
 
-clean:
+clean: test-clean
 	rm -f *~ rteval/*~ rteval/*.py[co] *.tar.bz2 *.tar.gz doc/*~
 	rm -rf rteval-[0-9]*-[0-9]*
+
+test-clean:
+	rm -rf tests/logs
 
 realclean: clean
 	rm -rf run
@@ -156,6 +159,7 @@ help:
 	@echo "        install:          install rteval locally"
 	@echo "        uninstall:        uninstall rteval"
 	@echo "        clean:            cleanup generated files"
+	@echo "        test-clean:       remove test artifacts under tests/logs"
 	@echo "        realclean:        Same as clean plus directory run"
 	@echo "        sysreport:        do a short testrun and generate sysreport data"
 	@echo "        tags:             generate a ctags file"
@@ -170,4 +174,4 @@ tags:
 cleantags:
 	rm -f tags
 
-.PHONY: help tests unit-tests mcp-tests test-all e2e-tests regression-tests cpuset-tests uninstall
+.PHONY: help tests unit-tests mcp-tests test-all e2e-tests regression-tests cpuset-tests test-clean clean realclean uninstall

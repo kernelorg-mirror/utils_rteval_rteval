@@ -8,6 +8,11 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../.." && pwd)"
+
+# Keep test artifacts (work dirs and logs) under tests/logs/ so they stay out
+# of the repo root and are easy to clean up (this script is in tests/regression/).
+LOG_DIR="${SCRIPT_DIR}/../logs"
+mkdir -p "$LOG_DIR"
 MOCK_RTLA="${SCRIPT_DIR}/mock-rtla-timerlat-partial-output.py"
 RTEVAL_MODULE="${REPO_ROOT}/rteval/modules/measurement/timerlat.py"
 
@@ -101,7 +106,7 @@ EOF
     sudo chmod +x /usr/bin/rtla
 
     # Run rteval and capture output
-    local workdir="test-timerlat-${scenario}-$$"
+    local workdir="${LOG_DIR}/test-timerlat-${scenario}-$$"
     local log_file="${workdir}.log"
 
     # Create workdir (rteval requires it to exist)
