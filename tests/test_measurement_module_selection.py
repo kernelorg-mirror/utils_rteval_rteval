@@ -1,5 +1,6 @@
 #!/usr/bin/python3
 # SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright 2025 John Kacur <jkacur@redhat.com>
 #
 # Unit test for --measurement-module command-line argument
 #

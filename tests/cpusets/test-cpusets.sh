@@ -1,4 +1,7 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright 2026 John Kacur <jkacur@redhat.com>
+#
 # test-cpusets.sh - Automated testing for rteval cpuset integration
 #
 # Note: 'set -e' is intentionally NOT used here. This suite tracks results

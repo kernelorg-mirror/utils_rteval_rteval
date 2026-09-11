@@ -1,4 +1,6 @@
 #!/bin/bash
+# SPDX-License-Identifier: GPL-2.0-or-later
+# Copyright 2026 John Kacur <jkacur@redhat.com>
 #
 # Test script for cyclictest error handling (RHEL-140898)
 # Tests that rteval handles partial/malformed cyclictest output gracefully
