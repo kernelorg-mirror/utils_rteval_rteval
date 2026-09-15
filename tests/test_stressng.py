@@ -15,14 +15,14 @@ class TestGetValidStressors(unittest.TestCase):
 
     @patch('rteval.modules.loads.stressng.subprocess.run')
     def test_parses_stressor_list(self, mock_run):
-        """Tests that the function works for multiple correct inputs"""
+        """Test parsing a valid stress-ng stressor list"""
         mock_run.return_value = MagicMock(stdout="cpu vm matrix\n")
         self.assertEqual(stressng.get_valid_stressors(), ['cpu', 'vm', 'matrix'])
 
     @patch('rteval.modules.loads.stressng.subprocess.run',
            side_effect=FileNotFoundError)
     def test_not_installed_exits(self, _):
-        """Tests that the program exits correctly if stress-ng is not installed"""
+        """Test when stress-ng is not installed"""
         with self.assertRaises(SystemExit) as cm:
             stressng.get_valid_stressors()
         self.assertEqual(cm.exception.code, 1)
@@ -30,7 +30,7 @@ class TestGetValidStressors(unittest.TestCase):
     @patch('rteval.modules.loads.stressng.subprocess.run',
            side_effect=subprocess.CalledProcessError(1, 'stress-ng'))
     def test_query_failure_exits(self, _):
-        """Tests that the program exits correctly if the query attempt fails"""
+        """Test when the stress-ng query fails"""
         with self.assertRaises(SystemExit):
             stressng.get_valid_stressors()
 
@@ -40,16 +40,20 @@ class TestValidateStressor(unittest.TestCase):
     @patch('rteval.modules.loads.stressng.get_valid_stressors',
            return_value=['cpu', 'vm'])
     def test_valid_passes(self, _):
-        """Tests that the function works for correct inputs"""
+        """Test that a valid stressor is accepted"""
         stressng.validate_stressor('cpu')   # should not raise
 
     @patch('rteval.modules.loads.stressng.get_valid_stressors',
            return_value=['cpu', 'vm'])
     def test_invalid_exits(self, _):
-        """Tests that the function exits properly for incorrect inputs"""
+        """Test that an invalid stressor is rejected"""
         with self.assertRaises(SystemExit) as cm:
             stressng.validate_stressor('bogus')
         self.assertEqual(cm.exception.code, 1)
 
+def main():
+    """Run the test suite"""
+    unittest.main(verbosity=2)
+
 if __name__ == '__main__':
-    unittest.main()
+    main()
