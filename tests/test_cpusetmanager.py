@@ -114,6 +114,20 @@ class TestCpusetManagerHousekeepingPartitions(unittest.TestCase):
             self.assertEqual(partition, 'isolated',
                            "Measurement cpuset should always be partition=isolated")
 
+    def test_measurement_member_flag(self):
+        """Test that measurement_member=True makes measurement partition=member"""
+        with CpusetManager(
+            housekeeping_cpus=[0, 1],
+            measurement_cpus=[2, 3],
+            logger=self.logger,
+            measurement_member=True
+        ) as manager:
+            measurement_partition_file = '/sys/fs/cgroup/rteval_measurement/cpuset.cpus.partition'
+            with open(measurement_partition_file) as f:
+                partition = f.read().strip()
+            self.assertEqual(partition, 'member',
+                           "Measurement cpuset should have partition=member when measurement_member is True")
+
     def test_no_housekeeping_cpuset_created_when_empty(self):
         """Test that housekeeping cpuset is not created when housekeeping_cpus is empty"""
         with CpusetManager(
@@ -182,6 +196,21 @@ class TestCpusetManagerCLIIntegration(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0,
                           "--housekeeping-isolated without --cpusets should fail")
+        self.assertIn('requires --cpusets', result.stderr,
+                     "Error message should mention --cpusets requirement")
+
+    def test_measurement_member_requires_cpusets(self):
+        """Test that --measurement-member requires --cpusets"""
+        result = subprocess.run(
+            [sys.executable, '/home/jkacur/src/rteval/rteval-cmd',
+             '--measurement-member',
+             '--duration', '1', '--onlyload'],
+            capture_output=True,
+            text=True
+        )
+
+        self.assertNotEqual(result.returncode, 0,
+                          "--measurement-member without --cpusets should fail")
         self.assertIn('requires --cpusets', result.stderr,
                      "Error message should mention --cpusets requirement")
 

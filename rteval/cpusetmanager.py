@@ -72,7 +72,7 @@ class CpusetManager:
             except Exception as e:
                 logger.log(Log.WARN, f"Failed to clean up {cpuset_name}: {e}")
 
-    def __init__(self, housekeeping_cpus, measurement_cpus, logger, housekeeping_isolated=False, create_measurement=True):
+    def __init__(self, housekeeping_cpus, measurement_cpus, logger, housekeeping_isolated=False, create_measurement=True, measurement_member=False):
         """
         Initialize cpuset manager
 
@@ -83,6 +83,8 @@ class CpusetManager:
             housekeeping_isolated: If True, use partition=isolated for housekeeping (default: False = partition=member)
             create_measurement: If False, skip creating the rteval_measurement cpuset
                 (e.g. --onlyload, which runs no measurement workloads; default: True)
+            measurement_member: If True, use partition=member for measurement, allowing
+                loads and measurement to share CPUs (default: False = partition=isolated)
 
         Note: Load workloads use taskset for CPU affinity and don't need cpusets.
         """
@@ -97,6 +99,7 @@ class CpusetManager:
         self.logger = logger
         self.housekeeping_isolated = housekeeping_isolated
         self.create_measurement = create_measurement
+        self.measurement_member = measurement_member
 
         # Cpuset objects (will be created in __enter__)
         self.housekeeping_cpuset = None
@@ -130,11 +133,12 @@ class CpusetManager:
         # Create measurement cpuset (skipped when there are no measurement
         # workloads, e.g. --onlyload)
         if self.create_measurement:
-            self.logger.log(Log.DEBUG, f"Creating rteval_measurement cpuset with CPUs {collapse_cpulist(self.measurement_cpus)}")
+            partition_type = "member" if self.measurement_member else "isolated"
+            self.logger.log(Log.DEBUG, f"Creating rteval_measurement cpuset with CPUs {collapse_cpulist(self.measurement_cpus)} (partition={partition_type})")
             self.measurement_cpuset = Cpuset('rteval_measurement')
             self.measurement_cpuset.write_memnode(self.numa_nodes)
             self.measurement_cpuset.assign_cpus(collapse_cpulist(self.measurement_cpus))
-            self.measurement_cpuset.write_cpu_exclusive(True)  # partition=isolated
+            self.measurement_cpuset.write_cpu_exclusive(not self.measurement_member)  # partition=isolated unless member
 
         self.logger.log(Log.INFO, "Cpusets created successfully")
         return self
