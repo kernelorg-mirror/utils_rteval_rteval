@@ -214,6 +214,20 @@ class TestCpusetManagerCLIIntegration(unittest.TestCase):
         self.assertIn('requires --cpusets', result.stderr,
                      "Error message should mention --cpusets requirement")
 
+    def test_measurement_member_help_text(self):
+        """Test that --measurement-member appears in help"""
+        result = subprocess.run(
+            [sys.executable, '/home/jkacur/src/rteval/rteval-cmd', '--help'],
+            capture_output=True,
+            text=True
+        )
+
+        self.assertEqual(result.returncode, 0)
+        self.assertIn('--measurement-member', result.stdout,
+                     "--measurement-member should appear in help")
+        self.assertIn('partition=member', result.stdout,
+                     "Help should mention partition=member")
+
     def test_housekeeping_isolated_requires_housekeeping(self):
         """Test that --housekeeping-isolated requires --housekeeping"""
         result = subprocess.run(

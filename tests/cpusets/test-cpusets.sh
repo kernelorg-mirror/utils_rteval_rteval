@@ -535,6 +535,109 @@ test_backward_compatibility() {
     fi
 }
 
+test_noload_skips_overlap_check() {
+    ((TESTS_RUN++)) || true
+    print_test "Overlap Check Skipped with --noload"
+
+    cleanup_cpusets
+
+    local cpus=$(get_test_cpus)
+    local msr_cpus=$(echo $cpus | awk '{print $2}')
+
+    local all_good=true
+
+    # With --noload only the measurement runs, but the load cpulist still
+    # defaults to all online CPUs, so measurement and loads overlap. The overlap
+    # guard must be skipped (not rtevcfg.noload); regressing that gate would make
+    # this exit non-zero.
+    print_info "Running (expect success): $RTEVAL_CMD --cpusets --noload --measurement-cpulist $msr_cpus -d $TEST_DURATION"
+
+    timeout 60s $RTEVAL_CMD --cpusets --noload --measurement-cpulist "$msr_cpus" -d "$TEST_DURATION" >> "$LOG_FILE" 2>&1 &
+    local rteval_pid=$!
+
+    sleep 2
+
+    if check_cpuset_exists "rteval_measurement"; then
+        print_info "rteval_measurement cpuset created: OK"
+    else
+        print_fail "rteval_measurement cpuset not created"
+        all_good=false
+    fi
+
+    wait $rteval_pid
+    local rc=$?
+    if [ "$rc" -eq 0 ]; then
+        print_info "rteval exited 0 with --noload despite overlapping cpulists: OK"
+    else
+        print_fail "rteval exited $rc with --noload (expected 0; overlap check should be skipped)"
+        all_good=false
+    fi
+
+    sleep 1
+    if check_no_cpusets; then
+        print_info "Cleanup successful: OK"
+    else
+        print_fail "Cpusets not cleaned up"
+        all_good=false
+        cleanup_cpusets
+    fi
+
+    if [ "$all_good" = true ]; then
+        print_pass "--noload overlap-skip test"
+    else
+        print_fail "--noload overlap-skip test"
+    fi
+}
+
+test_onlyload_no_measurement_cpuset() {
+    ((TESTS_RUN++)) || true
+    print_test "No Measurement Cpuset with --onlyload"
+
+    cleanup_cpusets
+
+    local all_good=true
+
+    # With --onlyload no measurement runs, so the overlap check is skipped and no
+    # rteval_measurement cpuset should be created (loads use taskset).
+    print_info "Running (expect success): $RTEVAL_CMD --cpusets --onlyload -d $TEST_DURATION"
+
+    timeout 60s $RTEVAL_CMD --cpusets --onlyload -d "$TEST_DURATION" >> "$LOG_FILE" 2>&1 &
+    local rteval_pid=$!
+
+    sleep 2
+
+    if check_cpuset_exists "rteval_measurement"; then
+        print_fail "rteval_measurement cpuset created, but --onlyload runs no measurement"
+        all_good=false
+    else
+        print_info "No rteval_measurement cpuset created: OK"
+    fi
+
+    wait $rteval_pid
+    local rc=$?
+    if [ "$rc" -eq 0 ]; then
+        print_info "rteval exited 0 with --onlyload: OK"
+    else
+        print_fail "rteval exited $rc with --onlyload (expected 0)"
+        all_good=false
+    fi
+
+    sleep 1
+    if check_no_cpusets; then
+        print_info "Cleanup successful: OK"
+    else
+        print_fail "Cpusets not cleaned up"
+        all_good=false
+        cleanup_cpusets
+    fi
+
+    if [ "$all_good" = true ]; then
+        print_pass "--onlyload no-measurement-cpuset test"
+    else
+        print_fail "--onlyload no-measurement-cpuset test"
+    fi
+}
+
 test_cleanup_on_interrupt() {
     ((TESTS_RUN++)) || true
     print_test "Cleanup on Ctrl+C (Interrupt Handling)"
@@ -795,6 +898,8 @@ main() {
     test_with_housekeeping
     test_housekeeping_without_isolcpus
     test_backward_compatibility
+    test_noload_skips_overlap_check
+    test_onlyload_no_measurement_cpuset
     test_cleanup_on_interrupt
 
     # Tests that require isolcpus (will skip if not available)
