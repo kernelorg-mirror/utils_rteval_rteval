@@ -109,6 +109,64 @@ def test_repr():
 
     print()
 
+def test_intersection():
+    """Test CpuList.intersection()"""
+    print("=" * 60)
+    print("Test 6: Intersection")
+    print("=" * 60)
+
+    a = CpuList("0-7")
+
+    # Overlap with another CpuList
+    result = a.intersection(CpuList("4-11"))
+    print(f"CpuList('0-7').intersection(CpuList('4-11')) = {result}")
+    assert result == CpuList("4-7"), result
+    assert isinstance(result, CpuList)
+
+    # Overlap with a plain list
+    result = a.intersection([4, 5, 6, 7, 20])
+    print(f"CpuList('0-7').intersection([4,5,6,7,20]) = {result}")
+    assert result == CpuList([4, 5, 6, 7]), result
+
+    # Disjoint -> empty
+    result = a.intersection(CpuList("8-11"))
+    print(f"CpuList('0-7').intersection(CpuList('8-11')) = {result} (len {len(result)})")
+    assert len(result) == 0
+
+    # Original is unchanged
+    assert a == CpuList("0-7")
+
+    print()
+
+def test_difference():
+    """Test CpuList.difference()"""
+    print("=" * 60)
+    print("Test 7: Difference")
+    print("=" * 60)
+
+    a = CpuList("0-7")
+
+    # Difference with another CpuList
+    result = a.difference(CpuList("4-11"))
+    print(f"CpuList('0-7').difference(CpuList('4-11')) = {result}")
+    assert result == CpuList("0-3"), result
+    assert isinstance(result, CpuList)
+
+    # Difference with a plain list
+    result = a.difference([0, 1])
+    print(f"CpuList('0-7').difference([0,1]) = {result}")
+    assert result == CpuList("2-7"), result
+
+    # Difference with a superset -> empty
+    result = a.difference(CpuList("0-15"))
+    print(f"CpuList('0-7').difference(CpuList('0-15')) = {result} (len {len(result)})")
+    assert len(result) == 0
+
+    # Original is unchanged
+    assert a == CpuList("0-7")
+
+    print()
+
 if __name__ == '__main__':
     print("\nTesting CpuList class implementation\n")
 
@@ -117,6 +175,8 @@ if __name__ == '__main__':
     test_chaining()
     test_backward_compatibility()
     test_repr()
+    test_intersection()
+    test_difference()
 
     print("=" * 60)
     print("All tests completed!")

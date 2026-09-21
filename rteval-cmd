@@ -448,30 +448,31 @@ if __name__ == '__main__':
 
         # Check for conflicts between housekeeping and measurement/load cpulists
         if housekeeping_cpus:
+            housekeeping = CpuList(housekeeping_cpus)
             msrcfg_cpus = CpuList(msrcfg.cpulist).cpus if msrcfg.cpulist else []
             ldcfg_cpus = CpuList(ldcfg.cpulist).cpus if ldcfg.cpulist else []
 
             # Check measurement conflicts
             if msrcfg_cpulist_present:
-                conflicts = [cpu for cpu in housekeeping_cpus if cpu in msrcfg_cpus]
+                conflicts = housekeeping.intersection(msrcfg_cpus)
                 if conflicts:
                     raise RuntimeError(
-                        f"Housekeeping CPUs {collapse_cpulist(conflicts)} conflict with "
+                        f"Housekeeping CPUs {conflicts} conflict with "
                         f"--measurement-cpulist {msrcfg.cpulist}"
                     )
 
             # Check load conflicts
             if ldcfg_cpulist_present:
-                conflicts = [cpu for cpu in housekeeping_cpus if cpu in ldcfg_cpus]
+                conflicts = housekeeping.intersection(ldcfg_cpus)
                 if conflicts:
                     raise RuntimeError(
-                        f"Housekeeping CPUs {collapse_cpulist(conflicts)} conflict with "
+                        f"Housekeeping CPUs {conflicts} conflict with "
                         f"--loads-cpulist {ldcfg.cpulist}"
                     )
 
             # Filter out housekeeping CPUs from measurement and load lists
-            msrcfg_cpus = [cpu for cpu in msrcfg_cpus if cpu not in housekeeping_cpus]
-            ldcfg_cpus = [cpu for cpu in ldcfg_cpus if cpu not in housekeeping_cpus]
+            msrcfg_cpus = CpuList(msrcfg_cpus).difference(housekeeping).cpus
+            ldcfg_cpus = CpuList(ldcfg_cpus).difference(housekeeping).cpus
             msrcfg.cpulist = collapse_cpulist(msrcfg_cpus) if msrcfg_cpus else ""
             ldcfg.cpulist = collapse_cpulist(ldcfg_cpus) if ldcfg_cpus else ""
 

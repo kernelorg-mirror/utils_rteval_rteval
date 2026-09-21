@@ -111,6 +111,32 @@ class CpuList:
         """
         return CpuList(nonisolated_cpulist(self._cpus))
 
+    def intersection(self, other):
+        """
+        Return a new CpuList of CPUs present in both this list and other.
+
+        Args:
+            other: A CpuList or a list of CPU numbers
+
+        Returns:
+            CpuList: New instance with the CPUs common to both
+        """
+        other_cpus = other.cpus if isinstance(other, CpuList) else [int(cpu) for cpu in other]
+        return CpuList(list(set(self._cpus) & set(other_cpus)))
+
+    def difference(self, other):
+        """
+        Return a new CpuList of CPUs in this list but not in other.
+
+        Args:
+            other: A CpuList or a list of CPU numbers
+
+        Returns:
+            CpuList: New instance with this list's CPUs minus other's
+        """
+        other_cpus = other.cpus if isinstance(other, CpuList) else [int(cpu) for cpu in other]
+        return CpuList(list(set(self._cpus) - set(other_cpus)))
+
     def __str__(self):
         """Return collapsed string representation (e.g., '0-7,9-11')"""
         return collapse_cpulist(self._cpus)
