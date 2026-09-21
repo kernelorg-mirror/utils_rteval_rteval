@@ -572,7 +572,8 @@ if __name__ == '__main__':
                 housekeeping_cpus=housekeeping_cpus,
                 measurement_cpus=msrcfg_cpus,
                 logger=logger,
-                housekeeping_isolated=rtevcfg.housekeeping_isolated
+                housekeeping_isolated=rtevcfg.housekeeping_isolated,
+                create_measurement=not rtevcfg.onlyload
             )
 
         # Pass cpuset_manager to RtEval (None if not using cpusets)

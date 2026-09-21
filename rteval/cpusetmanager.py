@@ -23,7 +23,8 @@ class CpusetManager:
 
     Creates 1-2 cpusets based on configuration:
     - rteval_housekeeping: Only if housekeeping_cpus specified
-    - rteval_measurement: Always created for measurement workloads
+    - rteval_measurement: Created unless create_measurement is False
+      (e.g. --onlyload, which runs no measurement workloads)
 
     Load workloads use taskset for CPU affinity (no cpuset needed).
 
@@ -71,7 +72,7 @@ class CpusetManager:
             except Exception as e:
                 logger.log(Log.WARN, f"Failed to clean up {cpuset_name}: {e}")
 
-    def __init__(self, housekeeping_cpus, measurement_cpus, logger, housekeeping_isolated=False):
+    def __init__(self, housekeeping_cpus, measurement_cpus, logger, housekeeping_isolated=False, create_measurement=True):
         """
         Initialize cpuset manager
 
@@ -80,6 +81,8 @@ class CpusetManager:
             measurement_cpus: List of CPU integers for measurement workloads
             logger: rteval Log instance for logging
             housekeeping_isolated: If True, use partition=isolated for housekeeping (default: False = partition=member)
+            create_measurement: If False, skip creating the rteval_measurement cpuset
+                (e.g. --onlyload, which runs no measurement workloads; default: True)
 
         Note: Load workloads use taskset for CPU affinity and don't need cpusets.
         """
@@ -93,6 +96,7 @@ class CpusetManager:
         self.measurement_cpus = measurement_cpus
         self.logger = logger
         self.housekeeping_isolated = housekeeping_isolated
+        self.create_measurement = create_measurement
 
         # Cpuset objects (will be created in __enter__)
         self.housekeeping_cpuset = None
@@ -123,12 +127,14 @@ class CpusetManager:
             self.housekeeping_cpuset.assign_cpus(collapse_cpulist(self.housekeeping_cpus))
             self.housekeeping_cpuset.write_cpu_exclusive(self.housekeeping_isolated)  # partition=isolated if True, member if False
 
-        # Create measurement cpuset
-        self.logger.log(Log.DEBUG, f"Creating rteval_measurement cpuset with CPUs {collapse_cpulist(self.measurement_cpus)}")
-        self.measurement_cpuset = Cpuset('rteval_measurement')
-        self.measurement_cpuset.write_memnode(self.numa_nodes)
-        self.measurement_cpuset.assign_cpus(collapse_cpulist(self.measurement_cpus))
-        self.measurement_cpuset.write_cpu_exclusive(True)  # partition=isolated
+        # Create measurement cpuset (skipped when there are no measurement
+        # workloads, e.g. --onlyload)
+        if self.create_measurement:
+            self.logger.log(Log.DEBUG, f"Creating rteval_measurement cpuset with CPUs {collapse_cpulist(self.measurement_cpus)}")
+            self.measurement_cpuset = Cpuset('rteval_measurement')
+            self.measurement_cpuset.write_memnode(self.numa_nodes)
+            self.measurement_cpuset.assign_cpus(collapse_cpulist(self.measurement_cpus))
+            self.measurement_cpuset.write_cpu_exclusive(True)  # partition=isolated
 
         self.logger.log(Log.INFO, "Cpusets created successfully")
         return self

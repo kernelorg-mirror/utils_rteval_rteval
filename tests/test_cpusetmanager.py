@@ -132,6 +132,24 @@ class TestCpusetManagerHousekeepingPartitions(unittest.TestCase):
             self.assertTrue(os.path.exists(measurement_path),
                           "Measurement cpuset should exist")
 
+    def test_no_measurement_cpuset_created_when_create_measurement_false(self):
+        """Test that measurement cpuset is not created when create_measurement=False (e.g. --onlyload)"""
+        with CpusetManager(
+            housekeeping_cpus=[0, 1],
+            measurement_cpus=[2, 3],
+            logger=self.logger,
+            create_measurement=False
+        ) as manager:
+            # Check that measurement cpuset does NOT exist
+            measurement_path = '/sys/fs/cgroup/rteval_measurement'
+            self.assertFalse(os.path.exists(measurement_path),
+                           "Measurement cpuset should not exist when create_measurement is False")
+
+            # Check that housekeeping cpuset DOES exist
+            hk_path = '/sys/fs/cgroup/rteval_housekeeping'
+            self.assertTrue(os.path.exists(hk_path),
+                          "Housekeeping cpuset should exist")
+
 
 @unittest.skipUnless(os.geteuid() == 0, "Requires root permissions")
 @unittest.skipUnless(cpuset.CpusetsInit().supported, "Requires cgroup v2 support")
