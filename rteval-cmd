@@ -126,9 +126,6 @@ def parse_options(cfg, parser, cmdargs):
     parser.add_argument("--housekeeping-isolated", dest="rteval___housekeeping_isolated",
                       action="store_true", default=False,
                       help="make housekeeping cpuset use partition=isolated instead of member (requires --cpusets and --housekeeping)")
-    parser.add_argument("--measurement-member", dest="rteval___measurement_member",
-                      action="store_true", default=False,
-                      help="make measurement cpuset use partition=member instead of isolated, allowing loads and measurement to share CPUs (requires --cpusets)")
     parser.add_argument("--warn-non-isolated-core-sharing", dest="rteval___warn_non_isolated_core_sharing",
                       action="store_true", default=False,
                       help="warn about measurement and load CPUs sharing cores even when neither is isolated")
@@ -424,7 +421,7 @@ if __name__ == '__main__':
                 raise RuntimeError("--housekeeping-isolated requires --housekeeping")
 
         # Validate --measurement-member usage
-        if rtevcfg.measurement_member:
+        if msrcfg.member:
             if not rtevcfg.cpusets:
                 raise RuntimeError("--measurement-member requires --cpusets")
 
@@ -531,7 +528,7 @@ if __name__ == '__main__':
         # the loads are left with no usable CPUs. Fail loud unless the user
         # opts into a shared (member) measurement partition. Skipped when no
         # loads run (--noload) or no measurement runs (--onlyload).
-        if rtevcfg.cpusets and not rtevcfg.measurement_member \
+        if rtevcfg.cpusets and not msrcfg.member \
                 and not rtevcfg.noload and not rtevcfg.onlyload:
             overlap = CpuList(msrcfg_cpus).intersection(ldcfg_cpus)
             if overlap:
@@ -601,7 +598,7 @@ if __name__ == '__main__':
                 logger=logger,
                 housekeeping_isolated=rtevcfg.housekeeping_isolated,
                 create_measurement=not rtevcfg.onlyload,
-                measurement_member=rtevcfg.measurement_member
+                measurement_member=msrcfg.member
             )
 
         # Pass cpuset_manager to RtEval (None if not using cpusets)

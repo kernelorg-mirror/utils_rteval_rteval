@@ -316,6 +316,11 @@ reference from the first import"""
                                   metavar='IDLESTATE',
                                   default=None,
                                   help='Idle state depth to set on cpus running measurement modules')
+            grparser.add_argument('--measurement-member',
+                                  dest='measurement___member',
+                                  action='store_true',
+                                  default=False,
+                                  help='make measurement cpuset use partition=member instead of isolated, allowing loads and measurement to share CPUs (requires --cpusets)')
             grparser.add_argument('--measurement-module',
                                   dest='measurement___measurement_module',
                                   type=str,
