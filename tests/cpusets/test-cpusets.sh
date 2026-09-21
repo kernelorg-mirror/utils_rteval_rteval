@@ -208,37 +208,41 @@ test_prerequisites() {
 
 test_same_cpus_no_housekeeping() {
     ((TESTS_RUN++)) || true
-    print_test "Same CPUs - No Housekeeping (Measurement Cpuset Only)"
+    print_test "Same CPUs - Overlap Handling (isolated fails, --measurement-member works)"
 
     cleanup_cpusets
-
-    # TODO: Temporarily skipped pending a design decision (see below).
-    # This runs measurement and loads on the SAME CPUs. The measurement cpuset
-    # is created as an isolated partition, which removes those CPUs from the root
-    # cgroup; the taskset-bound loads then cannot run there and kcompile fails,
-    # so rteval exits non-zero. (This test currently does not check rteval's exit
-    # code, so it silently "passes" today.) The fix - the measurement cpuset
-    # partition type / load CPU placement when measurement and loads overlap -
-    # is still under discussion. Re-enable (and add an rteval exit-code check)
-    # once that is resolved.
-    print_info "SKIPPED: pending design decision on measurement cpuset partition/overlap behavior"
-    ((TESTS_PASSED++)) || true
-    return 0
 
     local cpus=$(get_test_cpus)
     local msr_cpus=$(echo $cpus | awk '{print $2}')
 
-    print_info "Running: $RTEVAL_CMD --cpusets --measurement-cpulist $msr_cpus --loads-cpulist $msr_cpus -d $TEST_DURATION"
+    local all_good=true
 
-    # Run rteval in background
-    timeout 60s $RTEVAL_CMD --cpusets --measurement-cpulist "$msr_cpus" --loads-cpulist "$msr_cpus" -d "$TEST_DURATION" >> "$LOG_FILE" 2>&1 &
+    # Flavor A: overlap with the default isolated measurement partition must
+    # fail early, because isolating those CPUs would leave the taskset loads
+    # with nowhere to run.
+    print_info "Running (expect early exit): $RTEVAL_CMD --cpusets --measurement-cpulist $msr_cpus --loads-cpulist $msr_cpus -d $TEST_DURATION"
+    if timeout 60s $RTEVAL_CMD --cpusets --measurement-cpulist "$msr_cpus" --loads-cpulist "$msr_cpus" -d "$TEST_DURATION" >> "$LOG_FILE" 2>&1; then
+        print_fail "rteval succeeded, but overlap with an isolated measurement partition should fail early"
+        all_good=false
+    else
+        print_info "rteval exited non-zero on overlap: OK"
+        if grep -q -- "--measurement-member" "$LOG_FILE" 2>/dev/null; then
+            print_info "Error message points to --measurement-member: OK"
+        else
+            print_fail "Overlap error message missing guidance"
+            all_good=false
+        fi
+    fi
+
+    cleanup_cpusets
+
+    # Flavor B: the same overlap with --measurement-member co-locates loads and
+    # measurement on a member partition and succeeds.
+    print_info "Running (expect success): $RTEVAL_CMD --cpusets --measurement-member --measurement-cpulist $msr_cpus --loads-cpulist $msr_cpus -d $TEST_DURATION"
+    timeout 60s $RTEVAL_CMD --cpusets --measurement-member --measurement-cpulist "$msr_cpus" --loads-cpulist "$msr_cpus" -d "$TEST_DURATION" >> "$LOG_FILE" 2>&1 &
     local rteval_pid=$!
 
-    # Wait for cpusets to be created
     sleep 2
-
-    # Check during execution
-    local all_good=true
 
     if check_cpuset_exists "rteval_measurement"; then
         print_info "rteval_measurement cpuset created: OK"
@@ -247,31 +251,22 @@ test_same_cpus_no_housekeeping() {
         all_good=false
     fi
 
-    if ! check_cpuset_exists "rteval_loads"; then
-        print_info "No rteval_loads cpuset (loads use taskset): OK"
+    if check_cpuset_partition "rteval_measurement" "member"; then
+        print_info "Partition type is 'member': OK"
     else
-        print_fail "Unexpected rteval_loads cpuset found"
+        print_fail "Partition type is not 'member'"
         all_good=false
     fi
 
-    if check_cpuset_cpus "rteval_measurement" "$msr_cpus"; then
-        print_info "Measurement CPU assignment correct: OK"
-    else
-        print_fail "Measurement CPU assignment incorrect"
-        all_good=false
-    fi
-
-    if check_cpuset_partition "rteval_measurement" "isolated"; then
-        print_info "Partition type is 'isolated': OK"
-    else
-        print_fail "Partition type is not 'isolated'"
-        all_good=false
-    fi
-
-    # Wait for rteval to finish
     wait $rteval_pid
+    local rc=$?
+    if [ "$rc" -eq 0 ]; then
+        print_info "rteval exited 0 with --measurement-member: OK"
+    else
+        print_fail "rteval exited $rc with --measurement-member (expected 0)"
+        all_good=false
+    fi
 
-    # Check cleanup
     sleep 1
     if check_no_cpusets; then
         print_info "Cleanup successful: OK"
@@ -282,9 +277,9 @@ test_same_cpus_no_housekeeping() {
     fi
 
     if [ "$all_good" = true ]; then
-        print_pass "Measurement cpuset test"
+        print_pass "Same-CPU overlap handling test"
     else
-        print_fail "Measurement cpuset test"
+        print_fail "Same-CPU overlap handling test"
     fi
 }
 
@@ -439,18 +434,6 @@ test_housekeeping_without_isolcpus() {
 
     cleanup_cpusets
 
-    # TODO: Temporarily skipped pending a design decision.
-    # With '--cpusets --housekeeping' and no explicit --measurement-cpulist,
-    # the measurement cpuset defaults to all non-housekeeping CPUs as an
-    # isolated partition, which removes them from the root cgroup. The
-    # taskset-bound loads then have nowhere to run and kcompile fails, so
-    # rteval exits non-zero. The fix (measurement cpuset partition type /
-    # load CPU placement when measurement and loads overlap) is still under
-    # discussion. Re-enable this test once that is resolved.
-    print_info "SKIPPED: pending design decision on measurement cpuset partition/overlap behavior"
-    ((TESTS_PASSED++)) || true
-    return 0
-
     # Check if system has isolcpus
     local isolated=$(cat /sys/devices/system/cpu/isolated 2>/dev/null || echo "")
     print_info "System isolated CPUs: ${isolated:-none}"
@@ -458,22 +441,65 @@ test_housekeeping_without_isolcpus() {
     local cpus=$(get_test_cpus)
     local hk_cpus=$(echo $cpus | awk '{print $1}')
 
-    print_info "Running: $RTEVAL_CMD --cpusets --housekeeping $hk_cpus -d $TEST_DURATION"
+    local all_good=true
 
-    # This should succeed even if housekeeping CPUs are not in isolcpus
+    # Flavor A: with only --housekeeping, measurement and loads both default to
+    # the non-housekeeping CPUs, so the isolated measurement partition overlaps
+    # the loads and rteval must fail early.
+    print_info "Running (expect early exit): $RTEVAL_CMD --cpusets --housekeeping $hk_cpus -d $TEST_DURATION"
     if timeout 60s $RTEVAL_CMD --cpusets --housekeeping "$hk_cpus" -d "$TEST_DURATION" >> "$LOG_FILE" 2>&1; then
-        print_info "rteval succeeded with housekeeping without isolcpus requirement: OK"
-        sleep 1
-
-        if check_no_cpusets; then
-            print_info "Cleanup successful: OK"
-            print_pass "Housekeeping without isolcpus test"
-        else
-            print_fail "Cpusets not cleaned up"
-            cleanup_cpusets
-        fi
+        print_fail "rteval succeeded, but default overlap with an isolated measurement partition should fail early"
+        all_good=false
     else
-        print_fail "rteval failed with housekeeping (should work with cpusets)"
+        print_info "rteval exited non-zero on default overlap: OK"
+    fi
+
+    cleanup_cpusets
+
+    # Flavor B: adding --measurement-member co-locates loads and measurement on
+    # the non-housekeeping CPUs, so housekeeping without isolcpus succeeds.
+    print_info "Running (expect success): $RTEVAL_CMD --cpusets --housekeeping $hk_cpus --measurement-member -d $TEST_DURATION"
+    timeout 60s $RTEVAL_CMD --cpusets --housekeeping "$hk_cpus" --measurement-member -d "$TEST_DURATION" >> "$LOG_FILE" 2>&1 &
+    local rteval_pid=$!
+
+    sleep 2
+
+    if check_cpuset_exists "rteval_housekeeping"; then
+        print_info "rteval_housekeeping cpuset created (no isolcpus required): OK"
+    else
+        print_fail "rteval_housekeeping cpuset not created"
+        all_good=false
+    fi
+
+    if check_cpuset_cpus "rteval_housekeeping" "$hk_cpus"; then
+        print_info "Housekeeping CPU assignment correct: OK"
+    else
+        print_fail "Housekeeping CPU assignment incorrect"
+        all_good=false
+    fi
+
+    wait $rteval_pid
+    local rc=$?
+    if [ "$rc" -eq 0 ]; then
+        print_info "rteval exited 0 with housekeeping + --measurement-member: OK"
+    else
+        print_fail "rteval exited $rc (expected 0)"
+        all_good=false
+    fi
+
+    sleep 1
+    if check_no_cpusets; then
+        print_info "Cleanup successful: OK"
+    else
+        print_fail "Cpusets not cleaned up"
+        all_good=false
+        cleanup_cpusets
+    fi
+
+    if [ "$all_good" = true ]; then
+        print_pass "Housekeeping without isolcpus test"
+    else
+        print_fail "Housekeeping without isolcpus test"
     fi
 }
 
@@ -545,19 +571,9 @@ test_cleanup_on_interrupt() {
 
 test_measurement_run_on_isolcpus() {
     ((TESTS_RUN++)) || true
-    print_test "Measurement Run on isolcpus Flag"
+    print_test "Measurement Run on isolcpus Flag (disjoint loads)"
 
     cleanup_cpusets
-
-    # TODO: Temporarily skipped pending a design decision.
-    # On hosts WITH isolcpus this shares the same unresolved issue as tests 2
-    # and 5: the isolated measurement cpuset (affinity + isolcpus) removes its
-    # CPUs from the root cgroup, so taskset-bound loads on the affinity subset
-    # fail and rteval exits non-zero. Re-enable once the measurement cpuset
-    # partition type / load CPU placement (overlap) design decision is made.
-    print_info "SKIPPED: pending design decision on measurement cpuset partition/overlap behavior"
-    ((TESTS_PASSED++)) || true
-    return 0
 
     # Check if system has isolcpus
     local isolated=$(cat /sys/devices/system/cpu/isolated 2>/dev/null || echo "")
@@ -569,34 +585,60 @@ test_measurement_run_on_isolcpus() {
 
     print_info "System isolated CPUs: $isolated"
 
-    # Run with --measurement-run-on-isolcpus and --cpusets
-    print_info "Running: $RTEVAL_CMD --cpusets --measurement-run-on-isolcpus -d $TEST_DURATION"
+    # Confine loads to the non-isolated CPUs so measurement (isolcpus) and loads
+    # are disjoint; the measurement cpuset can then stay an isolated partition
+    # without colliding with the taskset loads.
+    local repo_root=$(dirname "$RTEVAL_CMD")
+    local load_cpus=$(PYTHONPATH="$repo_root" python3 -c "from rteval.cpulist_utils import CpuList, collapse_cpulist; online=CpuList(open('/sys/devices/system/cpu/online').read().strip()); print(collapse_cpulist(online.difference(CpuList('$isolated')).cpus))")
 
-    timeout 60s $RTEVAL_CMD --cpusets --measurement-run-on-isolcpus -d "$TEST_DURATION" >> "$LOG_FILE" 2>&1 &
+    if [ -z "$load_cpus" ]; then
+        print_info "SKIPPED: no non-isolated CPUs available for loads"
+        ((TESTS_PASSED++)) || true
+        return 0
+    fi
+
+    print_info "Non-isolated load CPUs: $load_cpus"
+
+    local all_good=true
+
+    # Run with --measurement-run-on-isolcpus and --cpusets, loads confined to
+    # the non-isolated CPUs so they don't overlap the isolated measurement cpuset
+    print_info "Running: $RTEVAL_CMD --cpusets --measurement-run-on-isolcpus --loads-cpulist $load_cpus -d $TEST_DURATION"
+
+    timeout 60s $RTEVAL_CMD --cpusets --measurement-run-on-isolcpus --loads-cpulist "$load_cpus" -d "$TEST_DURATION" >> "$LOG_FILE" 2>&1 &
     local rteval_pid=$!
 
     sleep 2
-
-    local all_good=true
 
     # Should create measurement cpuset
     if check_cpuset_exists "rteval_measurement"; then
         print_info "rteval_measurement cpuset created: OK"
 
-        # Check that cpuset includes isolated CPUs
         local cpuset_cpus=$(cat /sys/fs/cgroup/rteval_measurement/cpuset.cpus 2>/dev/null)
         print_info "Measurement cpuset CPUs: $cpuset_cpus"
-
-        # Verify isolated CPUs are included (would need complex parsing, just verify cpuset exists)
-        print_info "Measurement cpuset includes access to isolated CPUs: OK"
     else
         print_fail "rteval_measurement cpuset not created"
         all_good=false
     fi
 
-    wait $rteval_pid
-    sleep 1
+    # Measurement stays an isolated partition (disjoint from loads)
+    if check_cpuset_partition "rteval_measurement" "isolated"; then
+        print_info "Partition type is 'isolated': OK"
+    else
+        print_fail "Partition type is not 'isolated'"
+        all_good=false
+    fi
 
+    wait $rteval_pid
+    local rc=$?
+    if [ "$rc" -eq 0 ]; then
+        print_info "rteval exited 0 with disjoint isolcpus measurement/loads: OK"
+    else
+        print_fail "rteval exited $rc (expected 0)"
+        all_good=false
+    fi
+
+    sleep 1
     if check_no_cpusets; then
         print_info "Cleanup successful: OK"
     else
