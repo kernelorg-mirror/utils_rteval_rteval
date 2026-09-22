@@ -91,7 +91,8 @@ class LoadModules(RtEvalModules):
         for m in modcfg:
             # hope to eventually have different kinds but module is only one
             # for now (jcw)
-            if m[1].lower() == 'module':
+            # Guard against non-string option values (e.g. boolean flags) in this section
+            if isinstance(m[1], str) and m[1].lower() == 'module':
                 self._LoadModule(m[0])
 
 
@@ -104,7 +105,8 @@ class LoadModules(RtEvalModules):
         for m in modcfg:
             # hope to eventually have different kinds but module is only on
             # for now (jcw)
-            if m[1].lower() == 'module':
+            # Guard against non-string option values (e.g. boolean flags) in this section
+            if isinstance(m[1], str) and m[1].lower() == 'module':
                 self._cfg.AppendConfig(m[0], modparams)
                 self._cfg.AppendConfig(m[0], {'cpulist': cpulist})
                 modobj = self._InstantiateModule(m[0], self._cfg.GetSection(m[0]))
