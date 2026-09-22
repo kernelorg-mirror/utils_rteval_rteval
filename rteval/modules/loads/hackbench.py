@@ -18,6 +18,7 @@ from rteval.modules.loads import CommandLineLoad
 from rteval.Log import Log
 from rteval.systopology import SysTopology
 from rteval.cpulist_utils import CpuList
+from rteval.cpuset import cpuset_preexec
 
 class Hackbench(CommandLineLoad):
     def __init__(self, config, logger):
@@ -123,10 +124,14 @@ class Hackbench(CommandLineLoad):
         # Only log initial startup at DEBUG level to avoid spam
         if initial:
             self._log(Log.DEBUG, f"starting on node {node}: args = {args}")
+        # When a loads cpuset is in use, self-home into it before exec so
+        # hackbench and its fan-out of tasks are confined to the load CPUs.
+        preexec_fn = cpuset_preexec(self._cfg.cpuset_path, strict=True)
         p = subprocess.Popen(args,
                              stdin=self.__nullfp,
                              stdout=self.__out,
-                             stderr=self.__err)
+                             stderr=self.__err,
+                             preexec_fn=preexec_fn)
         if not p:
             self._log(Log.DEBUG, f"hackbench failed to start on node {node}")
             raise RuntimeError(f"hackbench failed to start on node {node}")

@@ -425,6 +425,11 @@ if __name__ == '__main__':
             if not rtevcfg.cpusets:
                 raise RuntimeError("--measurement-member requires --cpusets")
 
+        # Validate --loads-cpuset usage
+        if ldcfg.cpuset:
+            if not rtevcfg.cpusets:
+                raise RuntimeError("--loads-cpuset requires --cpusets")
+
         # Validate and process housekeeping CPUs
         housekeeping_cpus = []
         if rtevcfg.housekeeping:
@@ -591,14 +596,17 @@ if __name__ == '__main__':
             CpusetManager.cleanup_leftover_cpusets(logger)
 
             # Create manager (will create cpusets in __enter__)
-            # Note: Load CPUs not needed - loads use taskset for CPU affinity
+            # Loads use taskset by default; with --loads-cpuset they are also
+            # confined to the rteval_loads cpuset (member partition).
             cpuset_manager = CpusetManager(
                 housekeeping_cpus=housekeeping_cpus,
                 measurement_cpus=msrcfg_cpus,
                 logger=logger,
                 housekeeping_isolated=rtevcfg.housekeeping_isolated,
                 create_measurement=not rtevcfg.onlyload,
-                measurement_member=msrcfg.member
+                measurement_member=msrcfg.member,
+                loads_cpus=ldcfg_cpus,
+                create_loads=ldcfg.cpuset and not rtevcfg.noload
             )
 
         # Pass cpuset_manager to RtEval (None if not using cpusets)

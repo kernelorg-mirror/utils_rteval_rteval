@@ -17,6 +17,43 @@ PROCESS_BLOCKLIST = {
 }
 
 
+def cpuset_preexec(cpuset_path, strict=False):
+    """Return a subprocess preexec_fn that self-homes the child into a cpuset.
+
+    The returned callable runs in the forked child just before exec and writes
+    the child's own PID into <cpuset_path>/cgroup.procs, so the child and every
+    descendant it later forks inherit the cpuset natively -- a hard ceiling that
+    taskset masks cannot widen. Returns None when cpuset_path is falsy, so
+    callers can pass the result straight to Popen(preexec_fn=...) whether or not
+    a cpuset is in use.
+
+    strict controls the failure policy:
+      - False (measurement modules): swallow errors so a failed self-placement
+        falls back to the parent's post-hoc PID migration.
+      - True (loads): let the error propagate and abort the launch, since a load
+        escaping its cpuset would defeat the confinement the caller asked for.
+    """
+    if not cpuset_path:
+        return None
+
+    procs_file = os.path.join(cpuset_path, 'cgroup.procs')
+
+    def _move_to_cpuset():
+        """Move the forked child into the cpuset before exec."""
+        try:
+            with open(procs_file, 'w') as fp:
+                fp.write(str(os.getpid()))
+        except Exception as exc:
+            if strict:
+                # Raise a RuntimeError (not the underlying OSError) so callers
+                # that catch OSError around Popen don't silently swallow it.
+                raise RuntimeError(
+                    f"failed to move process into cpuset {cpuset_path}: {exc}") from exc
+            # else: fail silently - parent will attempt migration as fallback
+
+    return _move_to_cpuset
+
+
 class Cpuset:
     """ Class for manipulating cpusets """
 

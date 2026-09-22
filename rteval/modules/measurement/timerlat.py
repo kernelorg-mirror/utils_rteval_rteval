@@ -15,6 +15,7 @@ from rteval.Log import Log
 from rteval.modules import rtevalModulePrototype
 from rteval.systopology import cpuinfo, SysTopology
 from rteval.cpulist_utils import expand_cpulist, collapse_cpulist
+from rteval.cpuset import cpuset_preexec
 
 
 class TLRunData:
@@ -363,17 +364,7 @@ class Timerlat(rtevalModulePrototype):
 
         # If cpuset is configured, launch process inside the cpuset
         # This is critical for timerlat - migrating it mid-startup disrupts initialization
-        preexec_fn = None
-        if hasattr(self.__cfg, 'cpuset_path') and self.__cfg.cpuset_path:
-            def move_to_cpuset():
-                """Move child process into cpuset before exec"""
-                try:
-                    cpuset_procs = os.path.join(self.__cfg.cpuset_path, 'cgroup.procs')
-                    with open(cpuset_procs, 'w') as f:
-                        f.write(str(os.getpid()))
-                except Exception:
-                    pass  # Fail silently - parent will attempt migration as fallback
-            preexec_fn = move_to_cpuset
+        preexec_fn = cpuset_preexec(self.__cfg.cpuset_path)
 
         self.__timerlat_process = subprocess.Popen(self.__cmd,
                                                    stdout=self.__timerlat_out,

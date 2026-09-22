@@ -16,6 +16,7 @@ from rteval.modules.loads import CommandLineLoad
 from rteval.Log import Log
 from rteval.systopology import SysTopology
 from rteval.cpulist_utils import CpuList, collapse_cpulist
+from rteval.cpuset import cpuset_preexec
 
 DEFAULT_KERNEL_PREFIX = "linux-6.17.7"
 
@@ -89,12 +90,16 @@ class KBuildJob:
         subprocess.call(self.cleancmd, shell=True,
                         stdin=sin, stdout=sout, stderr=serr)
 
-    def run(self, sin=None, sout=None, serr=None):
+    def run(self, sin=None, sout=None, serr=None, cpuset_path=None):
         """ Use Popen to launch a kcompile job """
         self.log(Log.INFO, f"starting workload on node {int(self.node)}")
         self.log(Log.DEBUG, f"running on node {int(self.node)}: {self.runcmd}")
+        # When a loads cpuset is in use, self-home the build shell into it before
+        # exec so the whole make -jN subtree (gcc/as/ld) is confined to the load CPUs.
+        preexec_fn = cpuset_preexec(cpuset_path, strict=True)
         self.jobid = subprocess.Popen(self.runcmd, shell=True,
-                                      stdin=sin, stdout=sout, stderr=serr)
+                                      stdin=sin, stdout=sout, stderr=serr,
+                                      preexec_fn=preexec_fn)
 
     def isrunning(self):
         """ Query whether a job is running, returns True or False """
@@ -301,7 +306,8 @@ class Kcompile(CommandLineLoad):
                     if self.buildjobs[n].jobid.returncode not in (0, -2):
                         raise RuntimeError(f"kcompile module failed to run (returned {self.buildjobs[n].jobid.returncode}), please check logs for more detail")
                 self._log(Log.INFO, f"Starting load on node {n}")
-                self.buildjobs[n].run(self.__nullfd, self.__outfd, self.__errfd)
+                self.buildjobs[n].run(self.__nullfd, self.__outfd, self.__errfd,
+                                      cpuset_path=self._cfg.cpuset_path)
 
     def WorkloadAlive(self):
         # if any of the jobs has stopped, return False

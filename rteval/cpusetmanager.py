@@ -21,12 +21,14 @@ class CpusetManager:
     """
     Manager for rteval cpusets with automatic cleanup
 
-    Creates 1-2 cpusets based on configuration:
+    Creates 1-3 cpusets based on configuration:
     - rteval_housekeeping: Only if housekeeping_cpus specified
+    - rteval_loads: Only if create_loads is True (partition=member)
     - rteval_measurement: Created unless create_measurement is False
       (e.g. --onlyload, which runs no measurement workloads)
 
-    Load workloads use taskset for CPU affinity (no cpuset needed).
+    Unless create_loads is set, load workloads use taskset for CPU affinity
+    (no cpuset needed).
 
     Uses context manager pattern for automatic cleanup.
     """
@@ -72,7 +74,7 @@ class CpusetManager:
             except Exception as e:
                 logger.log(Log.WARN, f"Failed to clean up {cpuset_name}: {e}")
 
-    def __init__(self, housekeeping_cpus, measurement_cpus, logger, housekeeping_isolated=False, create_measurement=True, measurement_member=False):
+    def __init__(self, housekeeping_cpus, measurement_cpus, logger, housekeeping_isolated=False, create_measurement=True, measurement_member=False, loads_cpus=None, create_loads=False):
         """
         Initialize cpuset manager
 
@@ -85,8 +87,17 @@ class CpusetManager:
                 (e.g. --onlyload, which runs no measurement workloads; default: True)
             measurement_member: If True, use partition=member for measurement, allowing
                 loads and measurement to share CPUs (default: False = partition=isolated)
+            loads_cpus: List of CPU integers for load workloads (used only when
+                create_loads is True)
+            create_loads: If True, create the rteval_loads cpuset (partition=member)
+                and confine loads to it instead of relying only on taskset
+                (default: False = loads use taskset, as before)
 
-        Note: Load workloads use taskset for CPU affinity and don't need cpusets.
+        Note: Unless create_loads is set, load workloads use taskset for CPU
+        affinity and don't need a cpuset. The load cpuset is always a member
+        partition (confinement only), so its CPUs stay in the root cgroup's
+        effective set -- the main rteval process, when left in root (no
+        housekeeping), still has those CPUs to run on.
         """
         # Check cpuset support
         self.cpusets_init = CpusetsInit()
@@ -100,9 +111,12 @@ class CpusetManager:
         self.housekeeping_isolated = housekeeping_isolated
         self.create_measurement = create_measurement
         self.measurement_member = measurement_member
+        self.loads_cpus = loads_cpus if loads_cpus is not None else []
+        self.create_loads = create_loads
 
         # Cpuset objects (will be created in __enter__)
         self.housekeeping_cpuset = None
+        self.loads_cpuset = None
         self.measurement_cpuset = None
 
         # Get NUMA node range for memory assignment
@@ -111,6 +125,27 @@ class CpusetManager:
         self.logger.log(Log.DEBUG, f"CpusetManager initialized: "
                        f"housekeeping={collapse_cpulist(housekeeping_cpus) if housekeeping_cpus else 'none'}, "
                        f"measurement={collapse_cpulist(measurement_cpus)}")
+
+    def _create_cpuset(self, name, cpus, isolated):
+        """
+        Create a single cpuset with the given CPUs and partition type.
+
+        Args:
+            name: cpuset name (e.g. 'rteval_measurement')
+            cpus: list of CPU integers to assign
+            isolated: True for partition=isolated, False for partition=member
+
+        Returns:
+            the created Cpuset object
+        """
+        partition_type = "isolated" if isolated else "member"
+        self.logger.log(Log.DEBUG, f"Creating {name} cpuset with CPUs "
+                        f"{collapse_cpulist(cpus)} (partition={partition_type})")
+        cpuset = Cpuset(name)
+        cpuset.write_memnode(self.numa_nodes)
+        cpuset.assign_cpus(collapse_cpulist(cpus))
+        cpuset.write_cpu_exclusive(isolated)  # partition=isolated if True, member if False
+        return cpuset
 
     def __enter__(self):
         """
@@ -121,24 +156,33 @@ class CpusetManager:
         """
         self.logger.log(Log.INFO, "Creating rteval cpusets...")
 
-        # Create housekeeping cpuset if requested
+        # Creation order is not significant: each cpuset is created from an
+        # explicit, pre-computed disjoint CPU list, so creating one never
+        # changes what another gets. The main rteval process is placed into
+        # housekeeping by the separate migrate_root_tasks_to_housekeeping()
+        # sweep, which runs after all cpusets exist; the workloads then self-home
+        # into their own cpusets before exec. The only overlap ever allowed is
+        # member+member (loads + --measurement-member), which needs no ordering
+        # since member partitions are not exclusive; the isolated-measurement
+        # overlap case is rejected upstream. Measurement (the potential isolated
+        # partition) is created last as a defensive habit.
+
+        # Create housekeeping cpuset if requested.
         if self.housekeeping_cpus:
-            partition_type = "isolated" if self.housekeeping_isolated else "member"
-            self.logger.log(Log.DEBUG, f"Creating rteval_housekeeping cpuset with CPUs {collapse_cpulist(self.housekeeping_cpus)} (partition={partition_type})")
-            self.housekeeping_cpuset = Cpuset('rteval_housekeeping')
-            self.housekeeping_cpuset.write_memnode(self.numa_nodes)
-            self.housekeeping_cpuset.assign_cpus(collapse_cpulist(self.housekeeping_cpus))
-            self.housekeeping_cpuset.write_cpu_exclusive(self.housekeeping_isolated)  # partition=isolated if True, member if False
+            self.housekeeping_cpuset = self._create_cpuset(
+                'rteval_housekeeping', self.housekeeping_cpus, self.housekeeping_isolated)
+
+        # Create loads cpuset if requested (always a member partition, so its
+        # CPUs remain in the root cgroup's effective set)
+        if self.create_loads:
+            self.loads_cpuset = self._create_cpuset(
+                'rteval_loads', self.loads_cpus, isolated=False)
 
         # Create measurement cpuset (skipped when there are no measurement
         # workloads, e.g. --onlyload)
         if self.create_measurement:
-            partition_type = "member" if self.measurement_member else "isolated"
-            self.logger.log(Log.DEBUG, f"Creating rteval_measurement cpuset with CPUs {collapse_cpulist(self.measurement_cpus)} (partition={partition_type})")
-            self.measurement_cpuset = Cpuset('rteval_measurement')
-            self.measurement_cpuset.write_memnode(self.numa_nodes)
-            self.measurement_cpuset.assign_cpus(collapse_cpulist(self.measurement_cpus))
-            self.measurement_cpuset.write_cpu_exclusive(not self.measurement_member)  # partition=isolated unless member
+            self.measurement_cpuset = self._create_cpuset(
+                'rteval_measurement', self.measurement_cpus, isolated=not self.measurement_member)
 
         self.logger.log(Log.INFO, "Cpusets created successfully")
         return self
@@ -155,24 +199,31 @@ class CpusetManager:
         self.logger.log(Log.INFO, "Cleaning up rteval cpusets...")
 
         try:
-            # Move all processes back to root cgroup before destroying cpusets
-            # Destroy in reverse order of creation
-
-            if self.measurement_cpuset:
-                self._migrate_to_root(self.measurement_cpuset, 'rteval_measurement')
-                self.measurement_cpuset.destroy()
-                self.logger.log(Log.DEBUG, "Destroyed rteval_measurement cpuset")
-
-            if self.housekeeping_cpuset:
-                self._migrate_to_root(self.housekeeping_cpuset, 'rteval_housekeeping')
-                self.housekeeping_cpuset.destroy()
-                self.logger.log(Log.DEBUG, "Destroyed rteval_housekeeping cpuset")
+            # Move all processes back to root cgroup before destroying cpusets.
+            # Destroy in reverse order of creation.
+            self._destroy_cpuset(self.measurement_cpuset, 'rteval_measurement')
+            self._destroy_cpuset(self.loads_cpuset, 'rteval_loads')
+            self._destroy_cpuset(self.housekeeping_cpuset, 'rteval_housekeeping')
 
             self.logger.log(Log.INFO, "Cpuset cleanup complete")
         except Exception as e:
             self.logger.log(Log.ERR, f"Error during cpuset cleanup: {e}")
 
         return False  # Don't suppress exceptions
+
+    def _destroy_cpuset(self, cpuset, name):
+        """
+        Migrate a cpuset's tasks back to root and destroy it (no-op if None).
+
+        Args:
+            cpuset: Cpuset object to tear down, or None
+            name: Name of cpuset (for logging)
+        """
+        if not cpuset:
+            return
+        self._migrate_to_root(cpuset, name)
+        cpuset.destroy()
+        self.logger.log(Log.DEBUG, f"Destroyed {name} cpuset")
 
     def _migrate_to_root(self, cpuset, name):
         """

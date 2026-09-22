@@ -142,6 +142,27 @@ class RtEval(rtevalReport):
         self._measuremods.Setup(params)
 
 
+    def __apply_cpuset_path(self, modules, cpuset, label):
+        """Tell each module in a container which cpuset to self-home into.
+
+        Sets cfg.cpuset_path on every module's config so the module can launch
+        its workload directly inside the cpuset (self-placement before exec).
+        No-op when the cpuset was not created or the container is empty.
+        """
+        if not modules or not cpuset:
+            return
+        cpuset_path = cpuset._cpuset_path
+        for (modname, mod) in modules._RtEvalModules__modules:
+            # Try to find the config attribute - modules use self.__cfg (name-mangled)
+            cfg = None
+            for attr in ['_cfg', f'_{mod.__class__.__name__}__cfg']:
+                if hasattr(mod, attr):
+                    cfg = getattr(mod, attr)
+                    break
+            if cfg:
+                cfg.cpuset_path = cpuset_path
+                self.__logger.log(Log.DEBUG, f"Set {label} cpuset_path for {modname}: {cpuset_path}")
+
     def __RunMeasurement(self):
         global EARLYSTOP
 
@@ -174,19 +195,14 @@ class RtEval(rtevalReport):
                 print(f"started measurement threads on {onlinecpus} cores")
             print(f"Run duration: {str(self.__rtevcfg.duration)} seconds")
 
-            # Pass cpuset path to measurement modules so they can launch inside the cpuset
-            if self._cpuset_manager and self._cpuset_manager.measurement_cpuset:
-                cpuset_path = self._cpuset_manager.measurement_cpuset._cpuset_path
-                for (modname, mod) in self._measuremods._RtEvalModules__modules:
-                    # Try to find the config attribute - modules use self.__cfg (name-mangled)
-                    cfg = None
-                    for attr in ['_cfg', f'_{mod.__class__.__name__}__cfg']:
-                        if hasattr(mod, attr):
-                            cfg = getattr(mod, attr)
-                            break
-                    if cfg:
-                        cfg.cpuset_path = cpuset_path
-                        self.__logger.log(Log.DEBUG, f"Set cpuset_path for {modname}: {cpuset_path}")
+            # Pass cpuset paths to the modules so they can launch inside their
+            # cpuset (self-placement before exec). Done before Start()/Unleash()
+            # so each workload self-homes as it spawns.
+            if self._cpuset_manager:
+                self.__apply_cpuset_path(self._measuremods,
+                                         self._cpuset_manager.measurement_cpuset, "measurement")
+                self.__apply_cpuset_path(self._loadmods,
+                                         self._cpuset_manager.loads_cpuset, "loads")
 
             self._measuremods.Start()
 

@@ -10,6 +10,7 @@ from rteval.modules.loads import CommandLineLoad
 from rteval.Log import Log
 from rteval.systopology import SysTopology
 from rteval.cpulist_utils import CpuList
+from rteval.cpuset import cpuset_preexec
 
 def get_valid_stressors():
     """Query stress-ng for list of valid stressor names."""
@@ -120,11 +121,15 @@ class Stressng(CommandLineLoad):
             return
 
         self._log(Log.DEBUG, f'starting with {" ".join(self.args)}')
+        # When a loads cpuset is in use, self-home into it before exec so
+        # stress-ng and its workers are confined to the load CPUs.
+        preexec_fn = cpuset_preexec(self._cfg.cpuset_path, strict=True)
         try:
             self.process = subprocess.Popen(self.args,
                                             stdout=self.__out,
                                             stderr=self.__err,
-                                            stdin=self.__in)
+                                            stdin=self.__in,
+                                            preexec_fn=preexec_fn)
             self.started = True
             self.jobs = 1
             self._log(Log.DEBUG, "running")

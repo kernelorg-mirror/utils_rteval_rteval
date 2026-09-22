@@ -329,6 +329,17 @@ reference from the first import"""
                                   default=None,
                                   help='Select measurement module: cyclictest or timerlat (overrides config file)')
 
+        # Set up options for load modules only
+        if self.__modtype == 'loads':
+            grparser.add_argument('--loads-cpuset',
+                                  dest='loads___cpuset',
+                                  action='store_true',
+                                  default=False,
+                                  help='confine loads to a cgroup v2 cpuset (rteval_loads, '
+                                       'partition=member) instead of only taskset; loads and '
+                                       'all their descendants are held to the load CPUs '
+                                       '(requires --cpusets)')
+
         for (modname, mod) in list(self.__modsloaded.items()):
             opts = mod.ModuleParameters()
             if len(opts) == 0:

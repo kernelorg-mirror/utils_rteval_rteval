@@ -164,6 +164,45 @@ class TestCpusetManagerHousekeepingPartitions(unittest.TestCase):
             self.assertTrue(os.path.exists(hk_path),
                           "Housekeeping cpuset should exist")
 
+    def test_no_loads_cpuset_by_default(self):
+        """Test that the loads cpuset is not created unless create_loads is True"""
+        with CpusetManager(
+            housekeeping_cpus=[],
+            measurement_cpus=[2, 3],
+            logger=self.logger
+        ) as manager:
+            loads_path = '/sys/fs/cgroup/rteval_loads'
+            self.assertFalse(os.path.exists(loads_path),
+                           "Loads cpuset should not exist by default (loads use taskset)")
+            self.assertIsNone(manager.loads_cpuset,
+                            "manager.loads_cpuset should be None by default")
+
+    def test_loads_cpuset_created_as_member(self):
+        """Test that create_loads=True makes an rteval_loads member partition"""
+        with CpusetManager(
+            housekeeping_cpus=[],
+            measurement_cpus=[2, 3],
+            logger=self.logger,
+            loads_cpus=[0, 1],
+            create_loads=True
+        ) as manager:
+            loads_path = '/sys/fs/cgroup/rteval_loads'
+            self.assertTrue(os.path.exists(loads_path),
+                          "Loads cpuset should exist when create_loads is True")
+
+            # Loads must be a member partition so their CPUs stay in the root
+            # cgroup's effective set.
+            with open(os.path.join(loads_path, 'cpuset.cpus.partition')) as f:
+                partition = f.read().strip()
+            self.assertEqual(partition, 'member',
+                           "Loads cpuset should have partition=member")
+
+            # CPUs assigned to the loads cpuset should match loads_cpus
+            with open(os.path.join(loads_path, 'cpuset.cpus')) as f:
+                cpus = f.read().strip()
+            self.assertEqual(cpus, '0-1',
+                           "Loads cpuset should be assigned the requested CPUs")
+
 
 @unittest.skipUnless(os.geteuid() == 0, "Requires root permissions")
 @unittest.skipUnless(cpuset.CpusetsInit().supported, "Requires cgroup v2 support")
@@ -225,6 +264,35 @@ class TestCpusetManagerCLIIntegration(unittest.TestCase):
         self.assertEqual(result.returncode, 0)
         self.assertIn('--measurement-member', result.stdout,
                      "--measurement-member should appear in help")
+        self.assertIn('partition=member', result.stdout,
+                     "Help should mention partition=member")
+
+    def test_loads_cpuset_requires_cpusets(self):
+        """Test that --loads-cpuset requires --cpusets"""
+        result = subprocess.run(
+            [sys.executable, '/home/jkacur/src/rteval/rteval-cmd',
+             '--loads-cpuset',
+             '--duration', '1', '--onlyload'],
+            capture_output=True,
+            text=True
+        )
+
+        self.assertNotEqual(result.returncode, 0,
+                          "--loads-cpuset without --cpusets should fail")
+        self.assertIn('requires --cpusets', result.stderr,
+                     "Error message should mention --cpusets requirement")
+
+    def test_loads_cpuset_help_text(self):
+        """Test that --loads-cpuset appears in help"""
+        result = subprocess.run(
+            [sys.executable, '/home/jkacur/src/rteval/rteval-cmd', '--help'],
+            capture_output=True,
+            text=True
+        )
+
+        self.assertEqual(result.returncode, 0)
+        self.assertIn('--loads-cpuset', result.stdout,
+                     "--loads-cpuset should appear in help")
         self.assertIn('partition=member', result.stdout,
                      "Help should mention partition=member")
 

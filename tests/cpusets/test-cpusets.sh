@@ -638,6 +638,258 @@ test_onlyload_no_measurement_cpuset() {
     fi
 }
 
+test_loads_cpuset_requires_cpusets() {
+    ((TESTS_RUN++)) || true
+    print_test "--loads-cpuset Requires --cpusets"
+
+    cleanup_cpusets
+
+    local all_good=true
+
+    # --loads-cpuset is meaningless without --cpusets (no cpuset infrastructure
+    # to confine the loads into), so it must be rejected early.
+    print_info "Running (expect early exit): $RTEVAL_CMD --loads-cpuset -d $TEST_DURATION"
+    if timeout 60s $RTEVAL_CMD --loads-cpuset -d "$TEST_DURATION" >> "$LOG_FILE" 2>&1; then
+        print_fail "rteval succeeded, but --loads-cpuset without --cpusets should fail early"
+        all_good=false
+    else
+        print_info "rteval exited non-zero without --cpusets: OK"
+        if grep -q -- "--loads-cpuset requires --cpusets" "$LOG_FILE" 2>/dev/null; then
+            print_info "Error message points to --cpusets: OK"
+        else
+            print_fail "Validation error message missing guidance"
+            all_good=false
+        fi
+    fi
+
+    if [ "$all_good" = true ]; then
+        print_pass "--loads-cpuset requires --cpusets test"
+    else
+        print_fail "--loads-cpuset requires --cpusets test"
+    fi
+}
+
+test_loads_cpuset_member_partition() {
+    ((TESTS_RUN++)) || true
+    print_test "--loads-cpuset Creates rteval_loads Member Partition"
+
+    cleanup_cpusets
+
+    local cpus=$(get_test_cpus)
+    local msr_cpus=$(echo $cpus | awk '{print $2}')
+    local load_cpus=$(echo $cpus | awk '{print $3}')
+
+    local all_good=true
+
+    # With --loads-cpuset (and disjoint measurement/load CPUs so the default
+    # isolated measurement partition doesn't overlap the loads), rteval creates
+    # an rteval_loads cpuset as a member partition and confines the loads to it.
+    print_info "Running (expect success): $RTEVAL_CMD --cpusets --loads-cpuset --measurement-cpulist $msr_cpus --loads-cpulist $load_cpus -d $TEST_DURATION"
+
+    timeout 60s $RTEVAL_CMD --cpusets --loads-cpuset --measurement-cpulist "$msr_cpus" --loads-cpulist "$load_cpus" -d "$TEST_DURATION" >> "$LOG_FILE" 2>&1 &
+    local rteval_pid=$!
+
+    sleep 2
+
+    if check_cpuset_exists "rteval_loads"; then
+        print_info "rteval_loads cpuset created: OK"
+    else
+        print_fail "rteval_loads cpuset not created"
+        all_good=false
+    fi
+
+    if check_cpuset_cpus "rteval_loads" "$load_cpus"; then
+        print_info "Loads CPU assignment correct: OK"
+    else
+        print_fail "Loads CPU assignment incorrect"
+        all_good=false
+    fi
+
+    # Loads must be a member partition so their CPUs stay in the root cgroup's
+    # effective set (the main rteval process, left in root, still has CPUs).
+    if check_cpuset_partition "rteval_loads" "member"; then
+        print_info "Loads partition type is 'member': OK"
+    else
+        print_fail "Loads partition type is not 'member'"
+        all_good=false
+    fi
+
+    if check_cpuset_exists "rteval_measurement"; then
+        print_info "rteval_measurement cpuset created: OK"
+    else
+        print_fail "rteval_measurement cpuset not created"
+        all_good=false
+    fi
+
+    wait $rteval_pid
+    local rc=$?
+    if [ "$rc" -eq 0 ]; then
+        print_info "rteval exited 0 with --loads-cpuset: OK"
+    else
+        print_fail "rteval exited $rc with --loads-cpuset (expected 0)"
+        all_good=false
+    fi
+
+    sleep 1
+    if check_no_cpusets; then
+        print_info "Cleanup successful: OK"
+    else
+        print_fail "Cpusets not cleaned up"
+        all_good=false
+        cleanup_cpusets
+    fi
+
+    if [ "$all_good" = true ]; then
+        print_pass "--loads-cpuset member partition test"
+    else
+        print_fail "--loads-cpuset member partition test"
+    fi
+}
+
+test_loads_cpuset_skipped_with_noload() {
+    ((TESTS_RUN++)) || true
+    print_test "--loads-cpuset Skipped with --noload"
+
+    cleanup_cpusets
+
+    local cpus=$(get_test_cpus)
+    local msr_cpus=$(echo $cpus | awk '{print $2}')
+
+    local all_good=true
+
+    # --noload runs no loads, so even with --loads-cpuset no rteval_loads cpuset
+    # should be created (create_loads is gated on 'not rtevcfg.noload').
+    print_info "Running (expect success): $RTEVAL_CMD --cpusets --loads-cpuset --noload --measurement-cpulist $msr_cpus -d $TEST_DURATION"
+
+    timeout 60s $RTEVAL_CMD --cpusets --loads-cpuset --noload --measurement-cpulist "$msr_cpus" -d "$TEST_DURATION" >> "$LOG_FILE" 2>&1 &
+    local rteval_pid=$!
+
+    sleep 2
+
+    if ! check_cpuset_exists "rteval_loads"; then
+        print_info "No rteval_loads cpuset with --noload: OK"
+    else
+        print_fail "rteval_loads cpuset created, but --noload runs no loads"
+        all_good=false
+    fi
+
+    wait $rteval_pid
+    local rc=$?
+    if [ "$rc" -eq 0 ]; then
+        print_info "rteval exited 0 with --loads-cpuset --noload: OK"
+    else
+        print_fail "rteval exited $rc (expected 0)"
+        all_good=false
+    fi
+
+    sleep 1
+    if check_no_cpusets; then
+        print_info "Cleanup successful: OK"
+    else
+        print_fail "Cpusets not cleaned up"
+        all_good=false
+        cleanup_cpusets
+    fi
+
+    if [ "$all_good" = true ]; then
+        print_pass "--loads-cpuset skipped with --noload test"
+    else
+        print_fail "--loads-cpuset skipped with --noload test"
+    fi
+}
+
+test_loads_cpuset_with_measurement_member_overlap() {
+    ((TESTS_RUN++)) || true
+    print_test "--loads-cpuset + --measurement-member on Overlapping CPUs (Two Member Cpusets)"
+
+    cleanup_cpusets
+
+    local cpus=$(get_test_cpus)
+    local msr_cpus=$(echo $cpus | awk '{print $2}')
+
+    local all_good=true
+
+    # --measurement-member is the only safe way to overlap a loads cpuset with
+    # the measurement cpuset: both become member partitions, which may share
+    # CPUs (member partitions are not exclusive in cgroup v2). This exercises the
+    # otherwise-untested state of two overlapping member cpusets existing at once.
+    # The overlap guard is skipped because --measurement-member is set.
+    print_info "Running (expect success): $RTEVAL_CMD --cpusets --measurement-member --loads-cpuset --measurement-cpulist $msr_cpus --loads-cpulist $msr_cpus -d $TEST_DURATION"
+
+    timeout 60s $RTEVAL_CMD --cpusets --measurement-member --loads-cpuset --measurement-cpulist "$msr_cpus" --loads-cpulist "$msr_cpus" -d "$TEST_DURATION" >> "$LOG_FILE" 2>&1 &
+    local rteval_pid=$!
+
+    sleep 2
+
+    if check_cpuset_exists "rteval_loads"; then
+        print_info "rteval_loads cpuset created: OK"
+    else
+        print_fail "rteval_loads cpuset not created"
+        all_good=false
+    fi
+
+    if check_cpuset_exists "rteval_measurement"; then
+        print_info "rteval_measurement cpuset created: OK"
+    else
+        print_fail "rteval_measurement cpuset not created"
+        all_good=false
+    fi
+
+    # Both cpusets share the same CPUs
+    if check_cpuset_cpus "rteval_loads" "$msr_cpus"; then
+        print_info "Loads CPU assignment matches shared CPUs: OK"
+    else
+        print_fail "Loads CPU assignment incorrect"
+        all_good=false
+    fi
+
+    if check_cpuset_cpus "rteval_measurement" "$msr_cpus"; then
+        print_info "Measurement CPU assignment matches shared CPUs: OK"
+    else
+        print_fail "Measurement CPU assignment incorrect"
+        all_good=false
+    fi
+
+    # Both must be member partitions (overlap is only legal for member siblings)
+    if check_cpuset_partition "rteval_loads" "member"; then
+        print_info "Loads partition type is 'member': OK"
+    else
+        print_fail "Loads partition type is not 'member'"
+        all_good=false
+    fi
+
+    if check_cpuset_partition "rteval_measurement" "member"; then
+        print_info "Measurement partition type is 'member': OK"
+    else
+        print_fail "Measurement partition type is not 'member'"
+        all_good=false
+    fi
+
+    wait $rteval_pid
+    local rc=$?
+    if [ "$rc" -eq 0 ]; then
+        print_info "rteval exited 0 with overlapping member cpusets: OK"
+    else
+        print_fail "rteval exited $rc (expected 0)"
+        all_good=false
+    fi
+
+    sleep 1
+    if check_no_cpusets; then
+        print_info "Cleanup successful: OK"
+    else
+        print_fail "Cpusets not cleaned up"
+        all_good=false
+        cleanup_cpusets
+    fi
+
+    if [ "$all_good" = true ]; then
+        print_pass "--loads-cpuset + --measurement-member overlap test"
+    else
+        print_fail "--loads-cpuset + --measurement-member overlap test"
+    fi
+}
+
 test_cleanup_on_interrupt() {
     ((TESTS_RUN++)) || true
     print_test "Cleanup on Ctrl+C (Interrupt Handling)"
@@ -900,6 +1152,10 @@ main() {
     test_backward_compatibility
     test_noload_skips_overlap_check
     test_onlyload_no_measurement_cpuset
+    test_loads_cpuset_requires_cpusets
+    test_loads_cpuset_member_partition
+    test_loads_cpuset_skipped_with_noload
+    test_loads_cpuset_with_measurement_member_overlap
     test_cleanup_on_interrupt
 
     # Tests that require isolcpus (will skip if not available)
