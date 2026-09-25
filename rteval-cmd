@@ -703,3 +703,11 @@ if __name__ == '__main__':
         sys.exit(ec)
     except KeyboardInterrupt:
         sys.exit(0)
+    except RuntimeError as err:
+        # Setup/validation errors (bad flags, cpulist/NUMA/cpuset conflicts, ...)
+        # are user-facing: print a clean message instead of a traceback. Keep the
+        # traceback when debugging so developers can still see where it came from.
+        if '-D' in sys.argv or '--debug' in sys.argv:
+            raise
+        print(f"rteval: {err}", file=sys.stderr)
+        sys.exit(1)
