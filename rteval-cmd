@@ -31,7 +31,7 @@ from rteval.modules.loads import LoadModules
 from rteval.modules.measurement import MeasurementModules
 from rteval import cpupower
 from rteval.version import RTEVAL_VERSION
-from rteval.systopology import SysTopology, parse_cpulist_from_config, validate_housekeeping_cpus, validate_core_sharing, parse_numa_node_list
+from rteval.systopology import SysTopology, parse_cpulist_from_config, validate_housekeeping_cpus, validate_core_sharing, parse_numa_node_list, get_cpus_for_numa_nodes, validate_cpulist_numa_nodes
 from rteval.modules.loads.kcompile import ModuleParameters
 from rteval.cpulist_utils import CpuList, is_relative, collapse_cpulist
 from rteval.sysinfo import containercheck
@@ -454,6 +454,31 @@ if __name__ == '__main__':
                 housekeeping_cpus = validate_housekeeping_cpus(rtevcfg.housekeeping)
                 logger.log(Log.DEBUG, f"housekeeping cpulist: {collapse_cpulist(housekeeping_cpus)}")
 
+        # Expand the NUMA node placement flags into cpulists. A --*-numa-nodes
+        # flag is shorthand for "the CPUs on these node(s)". Combined with a
+        # --*-cpulist for the same side, the cpulist selects a subset that must
+        # stay within the named node(s) -- a CPU outside them is a hard error
+        # (validated here, against the resolved user cpulist, before housekeeping
+        # filtering and auto-inversion). When only the NUMA flag is given, expand
+        # it into the cpulist so the existing "one side specified" auto-inversion
+        # below fills in the other side.
+        if measurement_numa_nodes:
+            if msrcfg.cpulist:
+                validate_cpulist_numa_nodes(
+                    parse_cpulist_from_config(msrcfg.cpulist, msrcfg.run_on_isolcpus),
+                    measurement_numa_nodes, "--measurement")
+            else:
+                msrcfg.cpulist = collapse_cpulist(
+                    get_cpus_for_numa_nodes(measurement_numa_nodes))
+        if loads_numa_nodes:
+            if ldcfg.cpulist:
+                validate_cpulist_numa_nodes(
+                    parse_cpulist_from_config(ldcfg.cpulist),
+                    loads_numa_nodes, "--loads")
+            else:
+                ldcfg.cpulist = collapse_cpulist(
+                    get_cpus_for_numa_nodes(loads_numa_nodes))
+
         # Remember if cpulists were explicitly set by the user before running
         # parse_cpulist_from_config, which generates default value for them
         msrcfg_cpulist_present = msrcfg.cpulist != ""
@@ -617,7 +642,11 @@ if __name__ == '__main__':
                 create_measurement=not rtevcfg.onlyload,
                 measurement_member=msrcfg.member,
                 loads_cpus=ldcfg_cpus,
-                create_loads=ldcfg.cpuset and not rtevcfg.noload
+                create_loads=ldcfg.cpuset and not rtevcfg.noload,
+                # Pin cpuset.mems to the named node(s) when --*-numa-nodes is
+                # given; None leaves mems spanning all nodes (unchanged default).
+                measurement_memnodes=collapse_cpulist(measurement_numa_nodes) if measurement_numa_nodes else None,
+                loads_memnodes=collapse_cpulist(loads_numa_nodes) if loads_numa_nodes else None
             )
 
         # Pass cpuset_manager to RtEval (None if not using cpusets)
