@@ -316,6 +316,56 @@ def get_cpus_for_numa_nodes(node_list):
     return sorted(set(cpulist))
 
 
+def get_numa_nodes_for_cpus(cpulist):
+    """
+    Map a list of CPU integers to the NUMA node(s) they belong to.
+
+    The inverse of get_cpus_for_numa_nodes(). Used by subset validation (to
+    report which node an out-of-bounds CPU is actually on) and by cpuset.mems
+    derivation.
+
+    :param cpulist: List of CPU integers
+    :return: Sorted list of unique node integers containing any of those CPUs
+    """
+    if not cpulist:
+        return []
+
+    st = SysTopology()
+    wanted = set(cpulist)
+    nodes = [node for node in st.getnodes()
+             if wanted & set(st.getcpus(node))]
+    return sorted(nodes)
+
+
+def validate_cpulist_numa_nodes(cpulist, numa_nodes, flag_prefix="--measurement"):
+    """
+    Ensure every CPU in cpulist is on one of the specified NUMA node(s).
+
+    A --*-numa-nodes flag is meant to confine placement to the named node(s);
+    a --*-cpulist for the same side may only carve out a subset *within* those
+    nodes. A CPU outside them is a self-contradictory request and a hard error.
+    (A nonexistent node number is rejected earlier, in parse_numa_node_list().)
+
+    :param cpulist: List of CPU integers (the user's --*-cpulist)
+    :param numa_nodes: List of node integers (from parse_numa_node_list())
+    :param flag_prefix: "--measurement" or "--loads", used in error messages
+    :raises RuntimeError: if any CPU in cpulist is outside numa_nodes
+    """
+    if not cpulist or not numa_nodes:
+        return
+
+    allowed = get_cpus_for_numa_nodes(numa_nodes)
+    offending = CpuList(cpulist).difference(allowed).cpus
+    if offending:
+        actual_nodes = get_numa_nodes_for_cpus(offending)
+        raise RuntimeError(
+            f"{flag_prefix}-cpulist includes CPU(s) {collapse_cpulist(offending)}, "
+            f"which are on NUMA node(s) {collapse_cpulist(actual_nodes)}, not in "
+            f"{flag_prefix}-numa-nodes {collapse_cpulist(numa_nodes)}. "
+            f"Use a cpulist within the named node(s), drop the NUMA flag to run "
+            f"cross-node, or name every node in {flag_prefix}-numa-nodes.")
+
+
 def parse_cpulist_from_config(cpulist, run_on_isolcpus=False):
     """
     Generates a cpulist based on --*-cpulist argument given by user
