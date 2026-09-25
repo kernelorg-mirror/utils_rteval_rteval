@@ -2,7 +2,7 @@
 .\" SPDX-License-Identifier: GPL-2.0-or-later
 .\" Copyright (C) 2009-2026 Red Hat Inc.
 .\"
-.TH RTEVAL 8 "June 2026" "rteval 3.10" "System Administration"
+.TH RTEVAL 8 "September 2026" "rteval 3.13" "System Administration"
 .SH NAME
 rteval \- evaluate latency performance of a realtime Linux system
 .SH SYNOPSIS
@@ -77,6 +77,13 @@ Only run the loads (don't run measurement threads).
 .TP
 .B \-\-loads\-cpulist \fICPULIST\fR
 CPU list where load modules will run (e.g., 0-3,8-11).
+.TP
+.B \-\-loads\-numa\-nodes \fINODES\fR
+NUMA node(s) whose CPUs the load modules will run on (e.g., 0 or 0,1). This is a
+shorthand for the CPU list of those node(s); if the measurement side is left
+unset it is auto-assigned the remaining CPUs. When combined with \-\-cpusets,
+the loads cpuset.mems is also pinned to these node(s), keeping load memory local
+to the node. See NUMA Node Placement under NOTES.
 
 .SS CPU Isolation and Cpuset Options
 .TP
@@ -99,6 +106,14 @@ Select measurement module: cyclictest or timerlat (overrides config file).
 .TP
 .B \-\-measurement\-cpulist \fICPULIST\fR
 CPU list where measurement modules will run.
+.TP
+.B \-\-measurement\-numa\-nodes \fINODES\fR
+NUMA node(s) whose CPUs the measurement modules will run on (e.g., 1). This is a
+shorthand for the CPU list of those node(s); if the loads side is left unset it
+is auto-assigned the remaining CPUs. When combined with \-\-cpusets, the
+measurement cpuset.mems is also pinned to these node(s), keeping measurement
+memory local to the node. A \-\-measurement\-cpulist given alongside this option
+must select CPUs within the named node(s). See NUMA Node Placement under NOTES.
 .TP
 .B \-\-measurement\-run\-on\-isolcpus
 Include isolated CPUs in default cpulist.
@@ -228,6 +243,17 @@ sudo rteval --cpusets --measurement-cpulist 1-3 \\
 .RE
 .fi
 
+.SS NUMA Node Placement
+Confine measurement to NUMA node 1 and loads to node 0. With \-\-cpusets this
+pins each side's CPUs and memory (cpuset.mems) to its node:
+.PP
+.nf
+.RS
+sudo rteval --cpusets --measurement-numa-nodes 1 \\
+       --loads-numa-nodes 0
+.RE
+.fi
+
 .SS Custom Timerlat Configuration
 Run timerlat with custom interval and stop trace threshold:
 .PP
@@ -297,6 +323,15 @@ The default 60-second duration is only suitable for quick validation.
 When using cpusets (--cpusets), ensure your kernel has cgroup v2 support and the
 cpuset controller is available.
 .PP
+NUMA Node Placement: \-\-measurement\-numa\-nodes and \-\-loads\-numa\-nodes are
+a shorthand for the CPU list of the named node(s). When only one side names nodes
+(or a CPU list), the other side is auto-assigned the remaining CPUs. Combined
+with \-\-cpusets, each side's cpuset.mems is pinned to its node(s) so memory as
+well as CPUs stays local to the node; without \-\-cpusets only CPU affinity is
+applied. A \-\-measurement\-cpulist given alongside \-\-measurement\-numa\-nodes
+(or \-\-loads\-cpulist alongside \-\-loads\-numa\-nodes) must stay within those
+node(s), otherwise rteval exits with an error.
+.PP
 The timerlat measurement module requires a kernel with rtla support (kernel 5.15+
 with CONFIG_OSNOISE_TRACER enabled).
 
@@ -309,7 +344,7 @@ with CONFIG_OSNOISE_TRACER enabled).
 .SH AUTHORS
 rteval was written by Clark Williams, David Sommerseth, and John Kacur.
 .PP
-This manual page was written for rteval 3.10 in June 2026.
+This manual page was last updated for rteval 3.13 in September 2026.
 
 .SH REPORTING BUGS
 Report bugs to linux-rt-users@vger.kernel.org

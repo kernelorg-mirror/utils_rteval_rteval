@@ -94,6 +94,11 @@ Run with timerlat measurement module:
 
   $ sudo rteval -d 3600 --measurement-module timerlat
 
+Confine measurement to NUMA node 1 and loads to node 0 (with --cpusets this
+pins each side's CPUs and memory to its node):
+
+  $ sudo rteval --cpusets --measurement-numa-nodes 1 --loads-numa-nodes 0
+
 See the man page for more options:
 
   $ man rteval
