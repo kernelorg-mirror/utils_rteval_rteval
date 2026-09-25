@@ -74,7 +74,7 @@ class CpusetManager:
             except Exception as e:
                 logger.log(Log.WARN, f"Failed to clean up {cpuset_name}: {e}")
 
-    def __init__(self, housekeeping_cpus, measurement_cpus, logger, housekeeping_isolated=False, create_measurement=True, measurement_member=False, loads_cpus=None, create_loads=False):
+    def __init__(self, housekeeping_cpus, measurement_cpus, logger, housekeeping_isolated=False, create_measurement=True, measurement_member=False, loads_cpus=None, create_loads=False, measurement_memnodes=None, loads_memnodes=None):
         """
         Initialize cpuset manager
 
@@ -92,6 +92,11 @@ class CpusetManager:
             create_loads: If True, create the rteval_loads cpuset (partition=member)
                 and confine loads to it instead of relying only on taskset
                 (default: False = loads use taskset, as before)
+            measurement_memnodes: NUMA node spec (string) for the measurement
+                cpuset.mems, set when --measurement-numa-nodes is used. When None,
+                cpuset.mems spans all nodes (pre-NUMA-flag behavior).
+            loads_memnodes: NUMA node spec (string) for the loads cpuset.mems,
+                set when --loads-numa-nodes is used. When None, spans all nodes.
 
         Note: Unless create_loads is set, load workloads use taskset for CPU
         affinity and don't need a cpuset. The load cpuset is always a member
@@ -113,6 +118,10 @@ class CpusetManager:
         self.measurement_member = measurement_member
         self.loads_cpus = loads_cpus if loads_cpus is not None else []
         self.create_loads = create_loads
+        # Per-side NUMA memory nodes (None => all nodes, set below). Housekeeping
+        # keeps the all-nodes default; only the NUMA-flag-driven sides are pinned.
+        self.measurement_memnodes = measurement_memnodes
+        self.loads_memnodes = loads_memnodes
 
         # Cpuset objects (will be created in __enter__)
         self.housekeeping_cpuset = None
@@ -126,7 +135,7 @@ class CpusetManager:
                        f"housekeeping={collapse_cpulist(housekeeping_cpus) if housekeeping_cpus else 'none'}, "
                        f"measurement={collapse_cpulist(measurement_cpus)}")
 
-    def _create_cpuset(self, name, cpus, isolated):
+    def _create_cpuset(self, name, cpus, isolated, memnodes=None):
         """
         Create a single cpuset with the given CPUs and partition type.
 
@@ -134,15 +143,21 @@ class CpusetManager:
             name: cpuset name (e.g. 'rteval_measurement')
             cpus: list of CPU integers to assign
             isolated: True for partition=isolated, False for partition=member
+            memnodes: NUMA node spec (string) for cpuset.mems. When None,
+                defaults to self.numa_nodes (all nodes), preserving the
+                pre-NUMA-flag behavior.
 
         Returns:
             the created Cpuset object
         """
+        if memnodes is None:
+            memnodes = self.numa_nodes
         partition_type = "isolated" if isolated else "member"
         self.logger.log(Log.DEBUG, f"Creating {name} cpuset with CPUs "
-                        f"{collapse_cpulist(cpus)} (partition={partition_type})")
+                        f"{collapse_cpulist(cpus)} (partition={partition_type}, "
+                        f"mems={memnodes})")
         cpuset = Cpuset(name)
-        cpuset.write_memnode(self.numa_nodes)
+        cpuset.write_memnode(memnodes)
         cpuset.assign_cpus(collapse_cpulist(cpus))
         cpuset.write_cpu_exclusive(isolated)  # partition=isolated if True, member if False
         return cpuset
@@ -176,13 +191,15 @@ class CpusetManager:
         # CPUs remain in the root cgroup's effective set)
         if self.create_loads:
             self.loads_cpuset = self._create_cpuset(
-                'rteval_loads', self.loads_cpus, isolated=False)
+                'rteval_loads', self.loads_cpus, isolated=False,
+                memnodes=self.loads_memnodes)
 
         # Create measurement cpuset (skipped when there are no measurement
         # workloads, e.g. --onlyload)
         if self.create_measurement:
             self.measurement_cpuset = self._create_cpuset(
-                'rteval_measurement', self.measurement_cpus, isolated=not self.measurement_member)
+                'rteval_measurement', self.measurement_cpus, isolated=not self.measurement_member,
+                memnodes=self.measurement_memnodes)
 
         self.logger.log(Log.INFO, "Cpusets created successfully")
         return self
