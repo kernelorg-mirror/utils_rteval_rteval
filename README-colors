@@ -1,0 +1,56 @@
+Unreadable colors in rteval --help output
+==========================================
+
+Symptom
+-------
+Running `rteval --help` (or seeing a Python traceback) shows option names,
+metavars, or headings in very light, washed-out colors that are hard or
+impossible to read. This typically happens in terminals with a *light*
+(white) background.
+
+Cause
+-----
+This is NOT an rteval bug. Starting with Python 3.14, the standard library
+colorizes argparse `--help` output and tracebacks by default. argparse styles
+option strings and metavars in *bold* colors. Many terminals map bold text to
+their "bright" color palette, and the standard bright colors (bright green,
+yellow, cyan, white) are designed for dark backgrounds -- on a white
+background they are nearly invisible.
+
+Fixes
+-----
+Pick whichever suits you.
+
+1. Disable colored output entirely (works in any terminal, any program):
+
+     export NO_COLOR=1
+
+   or, to affect only Python:
+
+     export PYTHON_COLORS=0
+
+   Add the line to ~/.bashrc to make it permanent. This turns the colors off
+   rather than fixing them.
+
+2. Keep colors, but stop your terminal from washing out bold text. The option
+   name varies by terminal emulator; look for a setting like
+   "Show bold text in bright colors" / "Bold is bright" and turn it OFF, or
+   enable "Use colors from system theme".
+
+   - GNOME Terminal / Tilix: Preferences -> (profile) -> Colors ->
+     uncheck "Show bold text in bright colors".
+   - Konsole: Settings -> Edit Current Profile -> Appearance; use a color
+     scheme intended for a light background.
+   - xfce4-terminal: the relevant setting lives in xfconf, not just the
+     Preferences dialog. From a terminal run:
+
+       xfconf-query -c xfce4-terminal -p /color-bold-is-bright -s false
+
+     (If that does not fully help, also try:
+       xfconf-query -c xfce4-terminal -p /color-use-theme -s true )
+
+3. Use a terminal color scheme / palette designed for a light background, so
+   the bright colors remain dark enough to read.
+
+If none of the above helps, please report it to the rteval mailing list
+(linux-rt-users@vger.kernel.org) with your terminal emulator name and version.
