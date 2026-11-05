@@ -13,10 +13,11 @@ import os
 import sys
 import subprocess
 import tempfile
+from pathlib import Path
 
 # Add parent directory to path for imports
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
+srcdir = str(Path(__file__).resolve().parent.parent)
+sys.path.insert(0, srcdir)
 from rteval.cpusetmanager import CpusetManager
 from rteval import cpuset
 from rteval.Log import Log
@@ -209,6 +210,8 @@ class TestCpusetManagerHousekeepingPartitions(unittest.TestCase):
 class TestCpusetManagerCLIIntegration(unittest.TestCase):
     """Test rteval-cmd integration with --housekeeping-isolated"""
 
+    srcdir = str(Path(__file__).resolve().parent.parent)
+
     def setUp(self):
         """Clean up before each test"""
         try:
@@ -226,7 +229,7 @@ class TestCpusetManagerCLIIntegration(unittest.TestCase):
     def test_housekeeping_isolated_requires_cpusets(self):
         """Test that --housekeeping-isolated requires --cpusets"""
         result = subprocess.run(
-            [sys.executable, '/home/jkacur/src/rteval/rteval-cmd',
+            [sys.executable, f"{self.srcdir}/rteval-cmd",
              '--housekeeping', '0-1', '--housekeeping-isolated',
              '--duration', '1', '--onlyload'],
             capture_output=True,
@@ -241,7 +244,7 @@ class TestCpusetManagerCLIIntegration(unittest.TestCase):
     def test_measurement_member_requires_cpusets(self):
         """Test that --measurement-member requires --cpusets"""
         result = subprocess.run(
-            [sys.executable, '/home/jkacur/src/rteval/rteval-cmd',
+            [sys.executable, f"{self.srcdir}/rteval-cmd",
              '--measurement-member',
              '--duration', '1', '--onlyload'],
             capture_output=True,
@@ -256,7 +259,7 @@ class TestCpusetManagerCLIIntegration(unittest.TestCase):
     def test_measurement_member_help_text(self):
         """Test that --measurement-member appears in help"""
         result = subprocess.run(
-            [sys.executable, '/home/jkacur/src/rteval/rteval-cmd', '--help'],
+            [sys.executable, f"{self.srcdir}/rteval-cmd", '--help'],
             capture_output=True,
             text=True
         )
@@ -270,7 +273,7 @@ class TestCpusetManagerCLIIntegration(unittest.TestCase):
     def test_loads_cpuset_requires_cpusets(self):
         """Test that --loads-cpuset requires --cpusets"""
         result = subprocess.run(
-            [sys.executable, '/home/jkacur/src/rteval/rteval-cmd',
+            [sys.executable, f"{self.srcdir}/rteval-cmd",
              '--loads-cpuset',
              '--duration', '1', '--onlyload'],
             capture_output=True,
@@ -285,7 +288,7 @@ class TestCpusetManagerCLIIntegration(unittest.TestCase):
     def test_loads_cpuset_help_text(self):
         """Test that --loads-cpuset appears in help"""
         result = subprocess.run(
-            [sys.executable, '/home/jkacur/src/rteval/rteval-cmd', '--help'],
+            [sys.executable, f"{self.srcdir}/rteval-cmd", '--help'],
             capture_output=True,
             text=True
         )
@@ -299,7 +302,7 @@ class TestCpusetManagerCLIIntegration(unittest.TestCase):
     def test_housekeeping_isolated_requires_housekeeping(self):
         """Test that --housekeeping-isolated requires --housekeeping"""
         result = subprocess.run(
-            [sys.executable, '/home/jkacur/src/rteval/rteval-cmd',
+            [sys.executable, f"{self.srcdir}/rteval-cmd",
              '--cpusets', '--housekeeping-isolated',
              '--duration', '1', '--onlyload'],
             capture_output=True,
@@ -314,7 +317,7 @@ class TestCpusetManagerCLIIntegration(unittest.TestCase):
     def test_housekeeping_isolated_help_text(self):
         """Test that --housekeeping-isolated appears in help"""
         result = subprocess.run(
-            [sys.executable, '/home/jkacur/src/rteval/rteval-cmd', '--help'],
+            [sys.executable, f"{self.srcdir}/rteval-cmd", '--help'],
             capture_output=True,
             text=True
         )
@@ -328,7 +331,7 @@ class TestCpusetManagerCLIIntegration(unittest.TestCase):
     def test_housekeeping_help_text_accuracy(self):
         """Test that --housekeeping help text is accurate (no longer says 'isolated CPUs')"""
         result = subprocess.run(
-            [sys.executable, '/home/jkacur/src/rteval/rteval-cmd', '--help'],
+            [sys.executable, f"{self.srcdir}/rteval-cmd", '--help'],
             capture_output=True,
             text=True
         )
